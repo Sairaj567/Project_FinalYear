@@ -1,0 +1,65 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/admin-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>Manage Students</h1>
+      <p>View all registered students and their application history.</p>
+    </div>
+
+    <div class="container" style="padding: 0; margin-bottom: 15px;">
+      <% if(error && error.length > 0){ %>
+        <div class="card" style="background-color: var(--status-rejected); color: white; padding: 15px;">
+          <%= error %>
+        </div>
+      <% } %>
+      <% if(success && success.length > 0){ %>
+        <div class="card" style="background-color: var(--status-selected); color: white; padding: 15px;">
+          <%= success %>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Branch</th>
+            <th>Grad. Year</th>
+            <th>CGPA / %</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (students.length === 0) { %>
+            <tr>
+              <td colspan="6" style="text-align: center;">No students have registered yet.</td>
+            </tr>
+          <% } %>
+          <% students.forEach(student => { %>
+            <% const profile = student.studentProfile || {} %>
+            <% const personal = profile.personal || {} %>
+            <% const course = profile.currentCourse || {} %>
+            <tr>
+              <td><%= personal.firstName %> <%= personal.lastName %></td>
+              <td><%= student.email %></td>
+              <td><%= course.branch %></td>
+              <td><%= course.graduationYear %></td>
+              <td><%= course.aggregatePercentage %></td>
+              <td>
+                <a href="/admin/students/<%= student._id %>" class="btn btn-primary">View Details</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
