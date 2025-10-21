@@ -1,0 +1,110 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/student-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>Resume Builder</h1>
+    </div>
+
+    <div class="card resume-controls">
+      <div class="form-group">
+        <label for="template-selector">Select Template</label>
+        <select id="template-selector">
+          <option value="">Default (Classic)</option>
+          <option value="template-modern">Modern</option>
+          <option value="template-minimal">Minimal</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="window.print()">Download as PDF</button>
+    </div>
+
+    <div class="card">
+      <h4>AI Resume Review 🤖</h4>
+      <p>Click the button to get AI-powered tips to improve your resume based on your profile data.</p>
+      <button class="btn btn-secondary" id="get-ai-review">Get AI Review</button>
+      <div id="ai-review-box" style="display: none; margin-top: 15px;">Click the button to generate your review.</div>
+      <script>
+        document.getElementById('get-ai-review').addEventListener('click', () => {
+          document.getElementById('ai-review-box').style.display = 'block';
+        }, { once: true });
+      </script>
+    </div>
+
+    <div class="card" style="border-color: var(--primary-color);">
+      <h4><span style="color: var(--primary-color);">NEW:</span> You can now edit this resume!</h4>
+      <p>Click anywhere on the white resume preview below to make changes. These edits are temporary and **will not** be saved to your profile. This is only for making final adjustments before printing to PDF.</p>
+    </div>
+
+    <div class="resume-preview-wrapper">
+      <div class="resume-template" id="resume-to-print" contenteditable="true">
+        
+        <header class="resume-header">
+          <h1><%= profile.personal.firstName %> <%= profile.personal.lastName %></h1>
+          <div class="resume-contact">
+            <span><%= profile.user.email %></span>
+            <span><%= profile.personal.contactNumber %></span>
+            <span><a href="<%= profile.personal.linkedIn %>" target="_blank">LinkedIn</a></span>
+            <span><a href="<%= profile.personal.github %>" target="_blank">GitHub</a></span>
+          </div>
+        </header>
+
+        <section class="resume-section">
+          <h3>Education</h3>
+          <div class="resume-work-item">
+            <h4><%= profile.currentCourse.degree %> in <%= profile.currentCourse.branch %></h4>
+            <span class="company">Your University Name Here</span>
+            <span class="duration" style="float: right;">Graduating: <%= profile.currentCourse.graduationYear %></span>
+            <p style="margin-top: 5px;">Aggregate %: <%= profile.currentCourse.aggregatePercentage %>% | 12th: <%= profile.education.twelfthPercentage %>% | 10th: <%= profile.education.tenthPercentage %>%</p>
+          </div>
+        </section>
+
+        <section class="resume-section">
+          <h3>Technical Skills</h3>
+          <ul class="resume-list">
+            <% profile.skills.technical.forEach(skill => { %>
+              <li><%= skill %></li>
+            <% }) %>
+          </ul>
+        </section>
+
+        <section class="resume-section">
+          <h3>Projects</h3>
+          <% profile.projects.forEach(project => { %>
+            <div class="resume-work-item">
+              <h4><%= project.title %> <% if (project.url) { %> - <a href="<%= project.url %>" target="_blank">Project Link</a><% } %></h4>
+              <p style="clear: both; padding-top: 5px;"><%= project.description %></p>
+            </div>
+          <% }) %>
+        </section>
+
+        <section class="resume-section">
+          <h3>Work Experience</h3>
+          <% profile.workExperience.forEach(exp => { %>
+            <div class="resume-work-item">
+              <h4><%= exp.role %></h4>
+              <span class="company"><%= exp.company %></span>
+              <span class="duration" style="float: right;"><%= exp.duration %></span>
+              <p style="clear: both; padding-top: 5px;"><strong>Technologies:</strong> <%= exp.technologiesUsed.join(', ') %></p>
+              <p><%= exp.description %></p>
+            </div>
+          <% }) %>
+        </section>
+
+        <section class="resume-section">
+          <h3>Soft Skills</h3>
+          <ul class="resume-list">
+            <% profile.skills.soft.forEach(skill => { %>
+              <li><%= skill %></li>
+            <% }) %>
+          </ul>
+        </section>
+        
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
