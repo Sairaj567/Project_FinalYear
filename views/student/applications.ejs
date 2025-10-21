@@ -1,0 +1,44 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/student-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>My Applications</h1>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Role</th>
+            <th>CTC</th>
+            <th>Applied On</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (applications.length === 0) { %>
+            <tr>
+              <td colspan="5" style="text-align: center;">You have not applied to any jobs yet.</td>
+            </tr>
+          <% } %>
+          <% applications.forEach(app => { %>
+            <tr>
+              <td><%= app.job.company %></td>
+              <td><a href="/student/jobs/<%= app.job._id %>"><%= app.job.title %></a></td>
+              <td><%= app.job.ctc %></td>
+              <td><%= new Date(app.createdAt).toLocaleDateString() %></td>
+              <td><span class="status status-<%= app.status %>"><%= app.status %></span></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
