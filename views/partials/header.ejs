@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Placement Portal</title>
+  <link rel="stylesheet" href="/css/style.css">
+  </head>
+<body class=""> <nav class="main-nav">
+    <div class="nav-logo">
+      <a href="/">PlacementPortal</a>
+    </div>
+    <ul class="nav-links">
+      <% if (!currentUser) { %>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/register" class="btn btn-primary">Register</a></li>
+      <% } else { %>
+        <% if (currentUser.role === 'admin') { %>
+            <li><a href="/admin/dashboard">Dashboard</a></li>
+        <% } else { %>
+            <li><a href="/student/profile">My Profile</a></li>
+            <li><a href="/student/jobs">Find Jobs</a></li>
+        <% } %>
+        <li><a href="/logout" class="btn btn-secondary">Logout</a></li>
+      <% } %>
+      <li>
+        <button id="theme-toggle" title="Toggle Theme">🌙</button>
+      </li>
+    </ul>
+  </nav>
+
+  <main>
