@@ -1,0 +1,134 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/student-nav') %>
+  
+  <div class="main-content">
+    
+    <div class="content-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <h1>Profile Preview</h1>
+      <a href="/student/profile" class="btn btn-primary">Edit Profile</a>
+    </div>
+
+    <div class="card profile-preview-container">
+      <header class="preview-header">
+        <h1><%= profile.personal.firstName %> <%= profile.personal.lastName %></h1>
+        <div class="contact-info">
+          <span><%= profile.user.email %></span> |
+          <span><%= profile.personal.contactNumber %></span> |
+          <span><a href="<%= profile.personal.linkedIn %>" target="_blank">LinkedIn</a></span> |
+          <span><a href="<%= profile.personal.github %>" target="_blank">GitHub</a></span>
+        </div>
+      </header>
+
+      <section class="preview-section">
+        <h3>Personal Information</h3>
+        <div class="preview-grid">
+          <div class="preview-item"><p><strong>Full Name:</strong> <%= profile.personal.firstName %> <%= profile.personal.middleName %> <%= profile.personal.lastName %></p></div>
+          <div class="preview-item"><p><strong>Age:</strong> <%= profile.personal.age %></p></div>
+          <div class="preview-item"><p><strong>DOB:</strong> <%= profile.personal.dob ? new Date(profile.personal.dob).toLocaleDateString() : '' %></p></div>
+          <div class="preview-item"><p><strong>Other Social:</strong> <a href="<%= profile.personal.otherSocialMedia %>" target="_blank"><%= profile.personal.otherSocialMedia %></a></p></div>
+        </div>
+        <div class="preview-item" style="margin-top: 10px;">
+          <p><strong>Hobbies:</strong> <%= profile.personal.hobbies.join(', ') %></p>
+        </div>
+      </section>
+
+      <section class="preview-section">
+        <h3>Educational Background</h3>
+        <div class="preview-grid">
+          <div class="preview-item"><p><strong>10th %:</strong> <%= profile.education.tenthPercentage %>%</p></div>
+          <div class="preview-item"><p><strong>12th %:</strong> <%= profile.education.twelfthPercentage %>%</p></div>
+          <div class="preview-item"><p><strong>Diploma %:</strong> <%= profile.education.diplomaPercentage %>%</p></div>
+        </div>
+      </section>
+
+      <section class="preview-section">
+        <h3>Current Course</h3>
+        <div class="preview-grid">
+          <div class="preview-item"><p><strong>Degree:</strong> <%= profile.currentCourse.degree %></p></div>
+          <div class="preview-item"><p><strong>Department:</strong> <%= profile.currentCourse.department %></p></div>
+          <div class="preview-item"><p><strong>Branch:</strong> <%= profile.currentCourse.branch %></p></div>
+          <div class="preview-item"><p><strong>Graduation Year:</strong> <%= profile.currentCourse.graduationYear %></p></div>
+          <div class="preview-item"><p><strong>Status:</strong> <%= profile.currentCourse.isPursuing ? 'Pursuing' : 'Completed' %></p></div>
+          <div class="preview-item"><p><strong>Aggregate:</strong> <%= profile.currentCourse.aggregatePercentage %>%</p></div>
+        </div>
+      </section>
+
+      <section class="preview-section">
+        <h3>Skills</h3>
+        <p><strong>Technical Skills:</strong></p>
+        <ul class="preview-list job-tags">
+          <% profile.skills.technical.forEach(skill => { %>
+            <li class="job-tag"><%= skill %></li>
+          <% }) %>
+        </ul>
+        <p style="margin-top: 10px;"><strong>Soft Skills:</strong></p>
+        <ul class="preview-list job-tags">
+          <% profile.skills.soft.forEach(skill => { %>
+            <li class="job-tag"><%= skill %></li>
+          <% }) %>
+        </ul>
+      </section>
+
+      <section class="preview-section">
+        <h3>Extracurricular Activities</h3>
+        <p><%= profile.extracurricular.join(', ') %></p>
+      </section>
+
+      <section class="preview-section">
+        <h3>Projects</h3>
+        <% profile.projects.forEach(project => { %>
+          <div class="work-item">
+            <h4><%= project.title %> <% if (project.url) { %> - <a href="<%= project.url %>" target="_blank">Link</a><% } %></h4>
+            <p><%= project.description %></p>
+          </div>
+        <% }) %>
+      </section>
+
+      <section class="preview-section">
+        <h3>Work Experience</h3>
+        <% profile.workExperience.forEach(exp => { %>
+          <div class="work-item">
+            <h4><%= exp.role %></h4>
+            <p class="company"><%= exp.company %> | <%= exp.duration %></p>
+            <p><strong>Description:</strong> <%= exp.description %></p>
+            <p><strong>Technologies:</strong> <%= exp.technologiesUsed.join(', ') %></p>
+            <% if (exp.lorUrl) { %>
+              <p><a href="<%= exp.lorUrl %>" class="btn btn-secondary btn-sm" target="_blank">View LOR/Certificate</a></p>
+            <% } %>
+          </div>
+        <% }) %>
+      </section>
+      
+      <section class="preview-section">
+        <h3>Referrals</h3>
+        <% profile.referrals.forEach(ref => { %>
+          <div class="work-item">
+            <h4><%= ref.name %></h4>
+            <p class="company"><%= ref.designation %></p>
+            <p><strong>Contact:</strong> <%= ref.contactNumber %> | <strong>Email:</strong> <%= ref.email %></p>
+          </div>
+        <% }) %>
+      </section>
+
+      <section class="preview-section">
+        <h3>Documents</h3>
+        <% if (profile.resumeUrl) { %>
+          <p><a href="<%= profile.resumeUrl %>" class="btn btn-secondary" target="_blank">View Main Resume</a></p>
+        <% } %>
+         <% if (profile.certificates && profile.certificates.length > 0) { %>
+            <h5>Certificates:</h5>
+            <ul>
+              <% profile.certificates.forEach(cert => { %>
+                <li><a href="<%= cert.fileUrl %>" target="_blank"><%= cert.title || 'View Certificate' %></a></li>
+              <% }) %>
+            </ul>
+          <% } %>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
