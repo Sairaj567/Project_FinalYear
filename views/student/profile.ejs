@@ -1,0 +1,256 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/student-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>My Profile</h1>
+      <a href="/student/profile/preview" class="btn btn-secondary">Preview Profile</a>
+    </div>
+
+    <form action="/student/profile" method="POST" enctype="multipart/form-data" class="card">
+      
+      <div class="profile-section">
+        <h3>1. Personal Information</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="firstName">First Name</label>
+            <input type="text" id="firstName" name="firstName" value="<%= profile.personal.firstName %>">
+          </div>
+          <div class="form-group">
+            <label for="lastName">Last Name</label>
+            <input type="text" id="lastName" name="lastName" value="<%= profile.personal.lastName %>">
+          </div>
+          <div class="form-group">
+            <label for="middleName">Middle Name</label>
+            <input type="text" id="middleName" name="middleName" value="<%= profile.personal.middleName %>">
+          </div>
+          <div class="form-group">
+            <label for="age">Age</label>
+            <input type="number" id="age" name="age" value="<%= profile.personal.age %>">
+          </div>
+          <div class="form-group">
+            <label for="dob">Date of Birth</label>
+            <input type="date" id="dob" name="dob" value="<%= profile.personal.dob ? new Date(profile.personal.dob).toISOString().split('T')[0] : '' %>">
+          </div>
+          <div class="form-group">
+            <label for="contactNumber">Contact Number</label>
+            <input type="text" id="contactNumber" name="contactNumber" value="<%= profile.personal.contactNumber %>">
+          </div>
+          <div class="form-group">
+            <label for="linkedIn">LinkedIn URL</label>
+            <input type="url" id="linkedIn" name="linkedIn" value="<%= profile.personal.linkedIn %>">
+          </div>
+          <div class="form-group">
+            <label for="github">GitHub URL</label>
+            <input type="url" id="github" name="github" value="<%= profile.personal.github %>">
+          </div>
+          <div class="form-group">
+            <label for="otherSocialMedia">Other Social Media</label>
+            <input type="url" id="otherSocialMedia" name="otherSocialMedia" value="<%= profile.personal.otherSocialMedia %>">
+          </div>
+          <div class="form-group full-width">
+            <label for="hobbies">Hobbies (comma-separated)</label>
+            <input type="text" id="hobbies" name="hobbies" value="<%= profile.personal.hobbies.join(', ') %>">
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>2. Educational Background</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="tenthPercentage">10th Percentage</label>
+            <input type="number" step="0.01" id="tenthPercentage" name="tenthPercentage" value="<%= profile.education.tenthPercentage %>">
+          </div>
+          <div class="form-group">
+            <label for="twelfthPercentage">12th Percentage</label>
+            <input type="number" step="0.01" id="twelfthPercentage" name="twelfthPercentage" value="<%= profile.education.twelfthPercentage %>">
+          </div>
+          <div class="form-group">
+            <label for="diplomaPercentage">Diploma Percentage (if applicable)</label>
+            <input type="number" step="0.01" id="diplomaPercentage" name="diplomaPercentage" value="<%= profile.education.diplomaPercentage %>">
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>3. Current Course</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="degree">Degree Pursuing/Pursued</label>
+            <input type="text" id="degree" name="degree" value="<%= profile.currentCourse.degree %>" placeholder="e.g., B.Tech">
+          </div>
+          <div class="form-group">
+            <label for="department">Department</label>
+            <input type="text" id="department" name="department" value="<%= profile.currentCourse.department %>" placeholder="e.g., Computer Engineering">
+          </div>
+          <div class="form-group">
+            <label for="branch">Branch (Specialization)</label>
+            <input type="text" id="branch" name="branch" value="<%= profile.currentCourse.branch %>" placeholder="e.g., AI & ML">
+          </div>
+          <div class="form-group">
+            <label for="graduationYear">Graduation Year</label>
+            <input type="number" id="graduationYear" name="graduationYear" value="<%= profile.currentCourse.graduationYear %>">
+          </div>
+          <div class="form-group">
+            <label for="aggregatePercentage">Aggregate Percentage / CGPA</label>
+            <input type="number" step="0.01" id="aggregatePercentage" name="aggregatePercentage" value="<%= profile.currentCourse.aggregatePercentage %>">
+          </div>
+          <div class="form-group">
+            <label for="isPursuing">Status</label>
+            <select id="isPursuing" name="isPursuing">
+              <option value="true" <%= profile.currentCourse.isPursuing ? 'selected' : '' %>>Pursuing</option>
+              <option value="false" <%= !profile.currentCourse.isPursuing ? 'selected' : '' %>>Completed</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>4. Skills</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="technicalSkills">Technical Skills (comma-separated)</label>
+            <input type="text" id="technicalSkills" name="technicalSkills" value="<%= profile.skills.technical.join(', ') %>" placeholder="e.g., Python, React, SQL">
+          </div>
+          <div class="form-group">
+            <label for="softSkills">Soft Skills (comma-separated)</label>
+            <input type="text" id="softSkills" name="softSkills" value="<%= profile.skills.soft.join(', ') %>" placeholder="e.g., Teamwork, Communication">
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>5. Extracurricular Activities (comma-separated)</h3>
+        <div class="form-group full-width">
+          <label for="extracurricular">Activities</label>
+          <input type="text" id="extracurricular" name="extracurricular" value="<%= profile.extracurricular.join(', ') %>">
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>6. Projects</h3>
+        <p class="text-muted">(This simplified form handles one project. A full app would use JS to add more.)</p>
+        <% const project = profile.projects[0] || {} %>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="project_title">Project Title</label>
+            <input type="text" id="project_title" name="project_title" value="<%= project.title || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="project_url">Project URL</label>
+            <input type="url" id="project_url" name="project_url" value="<%= project.url || '' %>">
+          </div>
+          <div class="form-group full-width">
+            <label for="project_description">Project Description</label>
+            <textarea id="project_description" name="project_description"><%= project.description || '' %></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>7. Past Work Experience</h3>
+        <p class="text-muted">(This simplified form handles one experience.)</p>
+        <% const exp = profile.workExperience[0] || {} %>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="work_company">Company Name</label>
+            <input type="text" id="work_company" name="work_company" value="<%= exp.company || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="work_role">Role</label>
+            <input type="text" id="work_role" name="work_role" value="<%= exp.role || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="work_duration">Duration</label>
+            <input type="text" id="work_duration" name="work_duration" value="<%= exp.duration || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="work_technologies">Technologies Used (comma-separated)</label>
+            <input type="text" id="work_technologies" name="work_technologies" value="<%= exp.technologiesUsed ? exp.technologiesUsed.join(', ') : '' %>">
+          </div>
+          <div class="form-group full-width">
+            <label for="work_description">Work Description</label>
+            <textarea id="work_description" name="work_description"><%= exp.description || '' %></textarea>
+          </div>
+          <div class="form-group">
+            <label for="work_lor">Upload Certificate or LOR</label>
+            <input type="file" id="work_lor" name="work_lor" accept=".pdf,.doc,.docx">
+            <% if (exp.lorUrl) { %>
+              <p>Current: <a href="<%= exp.lorUrl %>" target="_blank">View Document</a></p>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>8. Referrals</h3>
+        <% const ref1 = profile.referrals[0] || {} %>
+        <% const ref2 = profile.referrals[1] || {} %>
+        <h4>Referral 1</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="ref1_name">Name</label>
+            <input type="text" id="ref1_name" name="ref1_name" value="<%= ref1.name || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref1_designation">Designation</label>
+            <input type="text" id="ref1_designation" name="ref1_designation" value="<%= ref1.designation || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref1_contact">Contact Number</label>
+            <input type="text" id="ref1_contact" name="ref1_contact" value="<%= ref1.contactNumber || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref1_email">Email</label>
+            <input type="email" id="ref1_email" name="ref1_email" value="<%= ref1.email || '' %>">
+          </div>
+        </div>
+        <h4 style="margin-top: 15px;">Referral 2</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="ref2_name">Name</label>
+            <input type="text" id="ref2_name" name="ref2_name" value="<%= ref2.name || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref2_designation">Designation</label>
+            <input type="text" id="ref2_designation" name="ref2_designation" value="<%= ref2.designation || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref2_contact">Contact Number</label>
+            <input type="text" id="ref2_contact" name="ref2_contact" value="<%= ref2.contactNumber || '' %>">
+          </div>
+          <div class="form-group">
+            <label for="ref2_email">Email</label>
+            <input type="email" id="ref2_email" name="ref2_email" value="<%= ref2.email || '' %>">
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <h3>9. Main Documents</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="resume">Upload Main Resume (PDF/Word)</label>
+            <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx">
+            <% if (profile.resumeUrl) { %>
+              <p>Current: <a href="<%= profile.resumeUrl %>" target="_blank">View Resume</a></p>
+            <% } %>
+          </div>
+          <div class="form-group">
+            <label for="certificates">Upload Certificates (Max 5)</label>
+            <input type="file" id="certificates" name="certificates" multiple accept=".pdf,.doc,.docx">
+            </div>
+        </div>
+      </div>
+      
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Profile</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
