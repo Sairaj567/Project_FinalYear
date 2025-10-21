@@ -1,0 +1,144 @@
+<%- include('layout', { 
+    pageTitle: 'Placed Students', 
+    currentPage: 'students',
+    
+    body: `
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Placed Students</h1>
+        <p class="text-gray-600 mt-2">View and manage all students who have been placed through campus placements</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">Total Placed</h3>
+                    <p class="text-2xl font-bold text-gray-800">${ stats.total %></p>
+                </div>
+                <div class="p-3 bg-purple-100 rounded-lg">
+                    <i class="fas fa-user-graduate text-purple-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-green-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">Average Package</h3>
+                    <p class="text-2xl font-bold text-gray-800">₹${ stats.avgPackage }L</p>
+                </div>
+                <div class="p-3 bg-green-100 rounded-lg">
+                    <i class="fas fa-money-bill-wave text-green-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-blue-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">Highest Package</h3>
+                    <p class="text-2xl font-bold text-gray-800">₹${ stats.maxPackage }L</p>
+                </div>
+                <div class="p-3 bg-blue-100 rounded-lg">
+                    <i class="fas fa-trophy text-blue-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 border-yellow-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-500">Companies</h3>
+                    <p class="text-2xl font-bold text-gray-800">${ stats.companies %></p>
+                </div>
+                <div class="p-3 bg-yellow-100 rounded-lg">
+                    <i class="fas fa-building text-yellow-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="px-6 py-4 border-b flex justify-between items-center">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800">All Placed Students</h3>
+                <p class="text-sm text-gray-600 mt-1">Total ${ placedStudents.length } students placed</p>
+            </div>
+            <div class="flex space-x-3">
+                <button class="bg-white text-purple-600 border border-purple-600 px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors flex items-center">
+                    <i class="fas fa-download mr-2"></i>
+                    Export
+                </button>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Branch</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company & Role</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Package</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${ placedStudents.map(placement => `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                    <span class="text-purple-600 font-semibold">
+                                        ${ placement.student.personalInfo.firstName ? placement.student.personalInfo.firstName.charAt(0).toUpperCase() : 'S' }
+                                    </span>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">${ placement.student.personalInfo.firstName } ${ placement.student.personalInfo.lastName }</div>
+                                    <div class="text-sm text-gray-500">ID: ${ placement.student._id.toString().slice(-6) }</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                ${ placement.student.degreeInfo.branch }
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-building text-green-600 text-xs"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">${ placement.job.company }</div>
+                                    <div class="text-sm text-gray-500">${ placement.job.title }</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <span class="text-lg font-bold text-green-600">₹${ (placement.job.salary.max / 100000).toFixed(1) }L</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div class="flex items-center mb-1">
+                                <i class="fas fa-envelope text-gray-400 mr-2 w-4"></i>
+                                </div>
+                            <div class="flex items-center text-gray-400">
+                                <i class="fas fa-phone text-gray-400 mr-2 w-4"></i>
+                                ${ placement.student.personalInfo.phone }
+                            </div>
+                        </td>
+                    </tr>
+                    `).join('') }
+                </tbody>
+            </table>
+        </div>
+
+        ${ placedStudents.length === 0 ? `
+        <div class="text-center py-12">
+            <i class="fas fa-user-graduate text-gray-300 text-6xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No placed students found</h3>
+            <p class="text-gray-500 mb-4">Students who get placed will appear here.</p>
+        </div>
+        ` : '' }
+    </div>
+    `
+}) %>
