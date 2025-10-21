@@ -1,0 +1,51 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/admin-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>Manage Job Postings</h1>
+      <p>Here you can edit or delete existing job postings.</p>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Job Title</th>
+            <th>Company</th>
+            <th>CTC</th>
+            <th>Type</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (jobs.length === 0) { %>
+            <tr>
+              <td colspan="5" style="text-align: center;">No jobs found.</td>
+            </tr>
+          <% } %>
+          <% jobs.forEach(job => { %>
+            <tr>
+              <td><a href="/admin/jobs/<%= job._id %>/manage"><%= job.title %></a></td>
+              <td><%= job.company %></td>
+              <td><%= job.ctc %></td>
+              <td><%= job.roleType %></td>
+              <td style="display: flex; gap: 10px;">
+                <a href="/admin/jobs/<%= job._id %>/edit" class="btn btn-secondary">Edit</a>
+                
+                <form action="/admin/jobs/<%= job._id %>?_method=DELETE" method="POST" onsubmit="return confirm('Are you sure you want to delete this job?');">
+                  <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
