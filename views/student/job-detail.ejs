@@ -1,0 +1,59 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/student-nav') %>
+  
+  <div class="main-content">
+    <div class="card">
+      <div class="job-tags" style="margin-bottom: 20px;">
+        <span class="job-tag role-type"><%= job.roleType %></span>
+        <span class="job-tag"><%= job.location %></span>
+        <span class="job-tag"><%= job.ctc %></span>
+      </div>
+
+      <h1><%= job.title %></h1>
+      <h3 class="company" style="color: var(--text-muted);"><%= job.company %></h3>
+
+      <div class="job-description" style="margin: 30px 0; white-space: pre-wrap;"><%= job.description %></div>
+
+      <hr style="border: none; border-top: 1px solid var(--border-color); margin: 30px 0;">
+
+      <% if (existingApplication) { %>
+        <div class="alert alert-success" style="padding: 15px; background-color: var(--status-selected); color: #fff; border-radius: 8px;">
+          <h3>You have already applied for this job.</h3>
+          <p>Your application status is: <strong class="status status-<%= existingApplication.status %>"><%= existingApplication.status %></strong></p>
+        </div>
+      <% } else { %>
+        <h3>Apply Now</h3>
+        <p>Your application will be pre-filled using your profile data. You can also upload a different resume for this specific application.</p>
+        
+        <form action="/student/jobs/<%= job._id %>/apply" method="POST" enctype="multipart/form-data">
+          
+          <div class="form-group">
+            <label>Applying as</label>
+            <input type="text" value="<%= profile.fullName %> (<%= currentUser.email %>)" disabled>
+          </div>
+          
+          <div class="form-group">
+            <label for="applicationResume">Upload Resume (Optional)</label>
+            <input type="file" name="applicationResume" id="applicationResume" accept=".pdf,.doc,.docx">
+            <% if (profile.resumeUrl) { %>
+              <p class="text-muted" style="margin-top: 5px;">If you don't upload one, your main profile resume will be used: <a href="<%= profile.resumeUrl %>" target="_blank">View Resume</a></p>
+            <% } else { %>
+              <p class="text-muted" style="color: var(--status-rejected); margin-top: 5px;">You have no main resume. You MUST upload one to apply.</p>
+            <% } %>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" <%= !profile.resumeUrl ? 'disabled' : '' %> >Submit Application</button>
+            <% if (!profile.resumeUrl) { %>
+              <p style="color: var(--status-rejected);">Please add a resume to your profile or upload one here to apply.</p>
+            <% } %>
+          </div>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
