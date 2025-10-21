@@ -1,0 +1,52 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/admin-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>Edit Job Posting</h1>
+    </div>
+
+    <form action="/admin/jobs/<%= job._id %>?_method=PUT" method="POST" class="card">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="title">Job Title</label>
+          <input type="text" id="title" name="title" value="<%= job.title %>" required>
+        </div>
+        <div class="form-group">
+          <label for="company">Company</label>
+          <input type="text" id="company" name="company" value="<%= job.company %>" required>
+        </div>
+        <div class="form-group">
+          <label for="location">Location</label>
+          <input type="text" id="location" name="location" value="<%= job.location %>">
+        </div>
+        <div class="form-group">
+          <label for="ctc">CTC (e.g., "10 LPA")</label>
+          <input type="text" id="ctc" name="ctc" value="<%= job.ctc %>">
+        </div>
+        <div class="form-group full-width">
+          <label for="roleType">Role Type</label>
+          <select id="roleType" name="roleType" required>
+            <option value="Campus Drive" <%= job.roleType === 'Campus Drive' ? 'selected' : '' %>>Campus Drive</option>
+            <option value="Internship" <%= job.roleType === 'Internship' ? 'selected' : '' %>>Internship</option>
+            <option value="Full-time" <%= job.roleType === 'Full-time' ? 'selected' : '' %>>Full-time</option>
+            <option value="Part-time" <%= job.roleType === 'Part-time' ? 'selected' : '' %>>Part-time</option>
+          </select>
+        </div>
+        <div class="form-group full-width">
+          <label for="description">Job Description</label>
+          <textarea id="description" name="description" rows="10" required><%= job.description %></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="/admin/jobs" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
