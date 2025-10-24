@@ -859,3 +859,131 @@ textarea {
   font-style: italic;
   display: inline;
 }
+/* ======================================== */
+/* LANDING PAGE ENHANCEMENTS      */
+/* ======================================== */
+
+.landing-hero {
+  background: linear-gradient(135deg, rgba(98, 0, 234, 0.8), rgba(118, 75, 162, 0.7)), url('/path/to/your/optional/background-image.jpg'); /* Optional: Add a subtle background */
+  background-size: cover;
+  background-position: center;
+  color: #ffffff;
+  padding: 100px 20px;
+  text-align: center;
+}
+
+.landing-hero h1 {
+  font-size: 3.5rem;
+  margin-bottom: 15px;
+  color: #fff; /* Ensure text is white */
+}
+
+.landing-hero p {
+  font-size: 1.3rem;
+  max-width: 700px;
+  margin: 0 auto 30px;
+  color: rgba(255, 255, 255, 0.9); /* Slightly transparent white */
+}
+
+.landing-section {
+  padding: 60px 0;
+  text-align: center;
+}
+
+.landing-section h2 {
+  font-size: 2.5rem;
+  margin-bottom: 40px;
+  color: var(--primary-color);
+}
+
+/* Features Section */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+}
+.feature-item {
+  text-align: left;
+  padding: 30px;
+}
+.feature-item h3 {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+.feature-item h3 .icon {
+  margin-right: 10px;
+  font-style: normal; /* Prevent italics if using <i> */
+}
+.feature-item ul {
+  list-style: disc;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+.feature-item li {
+  margin-bottom: 10px;
+}
+
+/* How It Works Section */
+.how-it-works {
+  background-color: var(--card-bg); /* Alternate background */
+}
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 30px;
+}
+.step-item {
+  padding: 20px;
+}
+.step-item h3 {
+  font-size: 1.3rem;
+  color: var(--primary-color);
+  margin-bottom: 10px;
+}
+.step-item p {
+  color: var(--text-muted);
+}
+
+/* Call to Action (CTA) Section */
+.cta {
+  background-color: var(--primary-color);
+  color: var(--primary-text);
+}
+.cta h2 {
+  color: var(--primary-text);
+}
+.cta p {
+  color: var(--primary-text);
+  opacity: 0.9;
+  margin-bottom: 30px;
+}
+.cta .btn-primary { /* Style the button specifically for CTA */
+  background-color: var(--card-bg);
+  color: var(--primary-color);
+  padding: 15px 35px;
+  font-size: 1.1rem;
+}
+.cta .btn-primary:hover {
+  filter: brightness(0.95);
+}
+
+/* Contact Section */
+.contact {
+  background-color: var(--bg-color); /* Match body background */
+}
+.portal-info {
+  margin-top: 0; /* Reset margin from original CSS */
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Responsive adjustments for landing page */
+@media (max-width: 768px) {
+  .landing-hero h1 { font-size: 2.5rem; }
+  .landing-hero p { font-size: 1.1rem; }
+  .landing-section h2 { font-size: 2rem; }
+  .features-grid, .steps-grid { grid-template-columns: 1fr; }
+}
