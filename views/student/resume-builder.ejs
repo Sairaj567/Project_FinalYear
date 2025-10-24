@@ -1,44 +1,54 @@
 <%- include('../partials/header') %>
 
 <div class="dashboard-container">
-  <%- include('../partials/student-nav') %>
+  
+  <% if (currentUser.role === 'student') { %>
+    <%- include('../partials/student-nav') %>
+  <% } %>
   
   <div class="main-content">
     <div class="content-header">
       <h1>Resume Builder</h1>
     </div>
 
-    <div class="card resume-controls">
-      <div class="form-group">
-        <label for="template-selector">Select Template</label>
-        <select id="template-selector">
-          <option value="">Default (Classic)</option>
-          <option value="template-modern">Modern</option>
-          <option value="template-minimal">Minimal</option>
-        </select>
+    <% if (currentUser.role === 'student') { %>
+      <div class="card resume-controls">
+        <div class="form-group">
+          <label for="template-selector">Select Template</label>
+          <select id="template-selector">
+            <option value="">Default (Classic)</option>
+            <option value="template-modern">Modern</option>
+            <option value="template-minimal">Minimal</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="window.print()">Download as PDF</button>
       </div>
-      <button class="btn btn-primary" onclick="window.print()">Download as PDF</button>
-    </div>
 
-    <div class="card">
-      <h4>AI Resume Review 🤖</h4>
-      <p>Click the button to get AI-powered tips to improve your resume based on your profile data.</p>
-      <button class="btn btn-secondary" id="get-ai-review">Get AI Review</button>
-      <div id="ai-review-box" style="display: none; margin-top: 15px;">Click the button to generate your review.</div>
-      <script>
-        document.getElementById('get-ai-review').addEventListener('click', () => {
-          document.getElementById('ai-review-box').style.display = 'block';
-        }, { once: true });
-      </script>
-    </div>
+      <div class="card">
+        <h4>AI Resume Review 🤖</h4>
+        <p>Click the button to get AI-powered tips to improve your resume based on your profile data.</p>
+        <button class="btn btn-secondary" id="get-ai-review">Get AI Review</button>
+        <div id="ai-review-box" style="display: none; margin-top: 15px;">Click the button to generate your review.</div>
+        <script>
+          document.getElementById('get-ai-review').addEventListener('click', () => {
+            document.getElementById('ai-review-box').style.display = 'block';
+          }, { once: true });
+        </script>
+      </div>
 
-    <div class="card" style="border-color: var(--primary-color);">
-      <h4><span style="color: var(--primary-color);">NEW:</span> You can now edit this resume!</h4>
-      <p>Click anywhere on the white resume preview below to make changes. These edits are temporary and **will not** be saved to your profile. This is only for making final adjustments before printing to PDF.</p>
-    </div>
-
+      <div class="card" style="border-color: var(--primary-color);">
+        <h4><span style="color: var(--primary-color);">NEW:</span> You can now edit this resume!</h4>
+        <p>Click anywhere on the white resume preview below to make changes. These edits are temporary and **will not** be saved to your profile. This is only for making final adjustments before printing to PDF.</p>
+      </div>
+    <% } else { %>
+      <div class="card" style="border-color: var(--primary-color);">
+        <h4>Admin Preview Mode</h4>
+        <p>This is a read-only preview of the student's builder-generated resume. Printing is enabled.</p>
+        <button class="btn btn-primary" onclick="window.print()">Print Preview</button>
+      </div>
+    <% } %>
     <div class="resume-preview-wrapper">
-      <div class="resume-template" id="resume-to-print" contenteditable="true">
+      <div class="resume-template" id="resume-to-print" contenteditable="<%= currentUser.role === 'student' ? 'true' : 'false' %>">
         
         <header class="resume-header">
           <h1><%= profile.personal.firstName %> <%= profile.personal.lastName %></h1>
