@@ -11,33 +11,40 @@
     <form action="/admin/jobs/<%= job._id %>?_method=PUT" method="POST" class="card">
       <div class="form-grid">
         <div class="form-group">
-          <label for="title">Job Title</label>
-          <input type="text" id="title" name="title" value="<%= job.title %>" required>
+          <label for="job_title">Job Title</label>
+          <input type="text" id="job_title" name="job_title" value="<%= job.job_title %>" required>
         </div>
         <div class="form-group">
-          <label for="company">Company</label>
-          <input type="text" id="company" name="company" value="<%= job.company %>" required>
+          <label for="company_name">Company Name</label>
+          <input type="text" id="company_name" name="company_name" value="<%= job.company_name %>" required>
         </div>
         <div class="form-group">
-          <label for="location">Location</label>
+          <label for="location">Location (e.g., Remote, On-site)</label>
           <input type="text" id="location" name="location" value="<%= job.location %>">
         </div>
         <div class="form-group">
-          <label for="ctc">CTC (e.g., "10 LPA")</label>
-          <input type="text" id="ctc" name="ctc" value="<%= job.ctc %>">
+          <label for="location_details">Location Details (e.g., Bengaluru, India)</label>
+          <input type="text" id="location_details" name="location_details" value="<%= job.location_details %>">
+        </div>
+        <div class="form-group">
+          <label for="compensation">Compensation (e.g., 5 - 18 LPA)</label>
+          <input type="text" id="compensation" name="compensation" value="<%= job.compensation %>">
+        </div>
+        <div class="form-group">
+          <label for="link">Application Link</label>
+          <input type="text" id="link" name="link" value="<%= job.link %>">
         </div>
         <div class="form-group full-width">
-          <label for="roleType">Role Type</label>
-          <select id="roleType" name="roleType" required>
-            <option value="Campus Drive" <%= job.roleType === 'Campus Drive' ? 'selected' : '' %>>Campus Drive</option>
-            <option value="Internship" <%= job.roleType === 'Internship' ? 'selected' : '' %>>Internship</option>
-            <option value="Full-time" <%= job.roleType === 'Full-time' ? 'selected' : '' %>>Full-time</option>
-            <option value="Part-time" <%= job.roleType === 'Part-time' ? 'selected' : '' %>>Part-time</option>
-          </select>
+          <label for="summary">Summary</label>
+          <textarea id="summary" name="summary" rows="6"><%= job.summary %></textarea>
         </div>
         <div class="form-group full-width">
-          <label for="description">Job Description</label>
-          <textarea id="description" name="description" rows="10" required><%= job.description %></textarea>
+          <label for="key_skills_mentioned">Key Skills (comma-separated)</label>
+          <input type="text" id="key_skills_mentioned" name="key_skills_mentioned" value="<%= job.key_skills_mentioned.join(', ') %>">
+        </div>
+        <div class="form-group full-width">
+          <label for="next_step">Next Step</label>
+          <input type="text" id="next_step" name="next_step" value="<%= job.next_step %>">
         </div>
       </div>
       <div class="form-actions">

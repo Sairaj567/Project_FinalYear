@@ -160,27 +160,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (applyButton) {
     applyButton.addEventListener('click', async () => {
-      // 1. Get all the data from the button's "data-*" attributes
       const { 
         jobId, 
         stuId, 
         stuName, 
         stuMail, 
         portfolio, 
+        resumeUrl, // <-- New
         webhookUrl 
       } = applyButton.dataset;
 
-      // 2. Disable button to prevent double-clicks
-      applyButton.disabled = true;
-      applyButton.textContent = 'Applying...';
-      statusDiv.innerHTML = '';
+      // --- 1. VALIDATION ---
+      if (!resumeUrl) {
+        statusDiv.innerHTML = `
+          <div class="card" style="background-color: var(--status-rejected); color: white; padding: 15px;">
+            <strong>Error:</strong> You must upload a resume on your profile page before applying.
+          </div>`;
+        return;
+      }
+      if (!webhookUrl || webhookUrl === 'undefined') {
+         statusDiv.innerHTML = `
+          <div class="card" style="background-color: var(--status-rejected); color: white; padding: 15px;">
+            <strong>Configuration Error:</strong> The application webhook URL is not set. Please contact the administrator.
+          </div>`;
+        return;
+      }
 
-      // 3. Construct the URL with Query Parameters
+      // --- 2. UI FEEDBACK ---
+      applyButton.disabled = true;
+      applyButton.textContent = 'Submitting...';
+      statusDiv.innerHTML = `
+        <div class="card" style="background-color: var(--border-color); color: var(--text-main); padding: 15px;">
+          Sending your application...
+        </div>`;
+
+      // --- 3. CONSTRUCT URL ---
       const params = new URLSearchParams();
       params.append('job_id', jobId);
       params.append('stu_id', stuId);
-      params.append('sti_name', stuName);
+      params.append('stu_name', stuName);
       params.append('stu_mail', stuMail);
+      params.append('resume_url', resumeUrl); // <-- New
       if (portfolio) {
         params.append('portfolio', portfolio);
       }
@@ -188,30 +208,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const fullUrl = `${webhookUrl}?${params.toString()}`;
 
       try {
-        // 4. Send the GET request to the n8n webhook
-        const response = await fetch(fullUrl, { method: 'GET' });
+        // --- 4. SEND REQUEST ---
+        const response = await fetch(fullUrl, { method: 'POST' });
 
-        // n8n webhooks usually respond with a 200 OK
         if (response.ok) {
-          // Success!
-          applyButton.textContent = 'Applied!';
+          applyButton.textContent = 'Applied Successfully!';
           statusDiv.innerHTML = `
             <div class="card" style="background-color: var(--status-selected); color: white; padding: 15px;">
-              Application Submitted Successfully! The company has received your details.
+              <strong>Success!</strong> Your application has been submitted.
             </div>`;
         } else {
-          // Handle HTTP errors
-          throw new Error(`The server responded with status ${response.status}`);
+          throw new Error(`Server responded with status: ${response.status}`);
         }
       } catch (error) {
-        // Handle network errors
-        console.error('Error submitting application:', error);
+        console.error('n8n Application Error:', error);
         statusDiv.innerHTML = `
           <div class="card" style="background-color: var(--status-rejected); color: white; padding: 15px;">
-            An error occurred. Please try again.
+            <strong>Submission Failed.</strong> Could not send application. Please check your network connection or try again later.
           </div>`;
         applyButton.disabled = false;
-        applyButton.textContent = 'Submit Application';
+        applyButton.textContent = 'Try Again';
       }
     });
   }

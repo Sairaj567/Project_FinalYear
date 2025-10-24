@@ -9,9 +9,12 @@ const passport = require('passport');
 const LocalStrategy = require('passport-local');
 const passportLocalMongoose = require('passport-local-mongoose');
 const MongoStore = require('connect-mongo');
+const axios = require('axios');
+const pdf = require('pdf-parse');
+const mammoth = require('mammoth');
+const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
 const methodOverride = require('method-override');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const flash = require('connect-flash'); // === 1. NEW IMPORT ===
@@ -76,7 +79,7 @@ const studentProfileSchema = new mongoose.Schema({
     degree: { type: String, default: '' },
     department: { type: String, default: '' },
     branch: { type: String, default: '' },
-    graduationYear: { type: Number, default: 2025 },
+    graduationYear: { type: Number, default: null },
     isPursuing: { type: Boolean, default: true },
     aggregatePercentage: { type: Number, default: null }
   },
@@ -118,17 +121,21 @@ const studentProfileSchema = new mongoose.Schema({
 });
 const StudentProfile = mongoose.model('StudentProfile', studentProfileSchema);
 
-//NEW JOB SCHEMA
-// --- Job Schema ---
+// --- Job Schema (Updated) ---
 const jobSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  company: { type: String, required: true },
-  location: { type: String, default: 'Not Disclosed' },
-  salary: { type: String, default: 'Not Disclosed' }, // Replaced ctc
-  description: { type: String, required: true },
-  requirements: [{ type: String }], // Added
-  skills: [{ type: String }] // Added
-  // roleType is gone, postedBy is gone
+  company_name: { type: String, required: true },
+  job_title: { type: String, required: true },
+  recruiter_name: { type: String },
+  recruiter_email: { type: String },
+  location: { type: String },
+  location_details: { type: String },
+  compensation: { type: String },
+  key_skills_mentioned: [{ type: String }],
+  summary: { type: String },
+  next_step: { type: String },
+  link: { type: String },
+  status: { type: String, default: 'new' },
+  date: { type: Date, default: Date.now }
 }, { timestamps: true });
 const Job = mongoose.model('Job', jobSchema);
 
@@ -276,39 +283,8 @@ const profileUpload = upload.fields([
 // =================================================================
 //                        EMAIL (NODEMAILER)
 // =================================================================
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Removed nodemailer configuration and sendWelcomeEmail function as they are no longer needed
 
-async function sendWelcomeEmail(toEmail, username) {
-  try {
-    let info = await transporter.sendMail({
-      from: `"Placement Portal" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: "Welcome to the Placement Portal! 🎉",
-      html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>Hello, ${username}!</h2>
-          <p>Thank you for registering at the Placement Portal. We are excited to have you on board.</p>
-          <p>You can now log in to your account, complete your profile, and start applying for jobs.</p>
-          <br>
-          <p>Best of luck with your career!</p>
-          <p><b>The Placement Portal Team</b></p>
-        </div>
-      `,
-    });
-    console.log("Welcome email sent: %s", info.messageId);
-  } catch (error) {
-    console.error("Error sending welcome email:", error);
-  }
-}
 
 // =================================================================
 //                             ROUTES
@@ -350,9 +326,9 @@ app.post('/register', async (req, res, next) => {
       registeredUser.studentProfile = newProfile._id;
       await registeredUser.save();
     }
-    
-    // Don't await this, let it send in the background
-    sendWelcomeEmail(registeredUser.email, registeredUser.username).catch(console.error);
+
+    // Commented out the welcome email function call
+    // sendWelcomeEmail(registeredUser.email, registeredUser.username).catch(console.error);
 
     req.login(registeredUser, (err) => {
       if (err) return next(err);
@@ -430,27 +406,50 @@ app.post('/student/profile', isLoggedIn, isStudent, profileUpload, async (req, r
     // Section 5: Extracurricular
     profile.extracurricular = body.extracurricular ? body.extracurricular.split(',').map(s => s.trim()) : [];
     // Section 6: Projects
+    // This form is designed to edit the first project entry.
     if (body.project_title) {
-      profile.projects = [{
-        title: body.project_title,
-        description: body.project_description,
-        url: body.project_url
-      }];
+      if (profile.projects.length > 0) {
+        // Update existing project
+        profile.projects[0].title = body.project_title;
+        profile.projects[0].description = body.project_description;
+        profile.projects[0].url = body.project_url;
+      } else {
+        // Add new project if none exist
+        profile.projects.push({
+          title: body.project_title,
+          description: body.project_description,
+          url: body.project_url
+        });
+      }
     }
     // Section 7: Work Experience
     let lorUrl = '';
     if (files['work_lor']) {
       lorUrl = `/uploads/lors/${files['work_lor'][0].filename}`;
     }
+    // This form is designed to edit the first work experience entry.
     if (body.work_company) {
-      profile.workExperience = [{
-        company: body.work_company,
-        role: body.work_role,
-        technologiesUsed: body.work_technologies ? body.work_technologies.split(',').map(s => s.trim()) : [],
-        duration: body.work_duration,
-        description: body.work_description,
-        lorUrl: lorUrl || (profile.workExperience[0] ? profile.workExperience[0].lorUrl : '')
-      }];
+       if (profile.workExperience.length > 0) {
+        // Update existing work experience
+        profile.workExperience[0].company = body.work_company;
+        profile.workExperience[0].role = body.work_role;
+        profile.workExperience[0].technologiesUsed = body.work_technologies ? body.work_technologies.split(',').map(s => s.trim()) : [];
+        profile.workExperience[0].duration = body.work_duration;
+        profile.workExperience[0].description = body.work_description;
+        if (lorUrl) {
+          profile.workExperience[0].lorUrl = lorUrl;
+        }
+      } else {
+        // Add new work experience if none exist
+        profile.workExperience.push({
+          company: body.work_company,
+          role: body.work_role,
+          technologiesUsed: body.work_technologies ? body.work_technologies.split(',').map(s => s.trim()) : [],
+          duration: body.work_duration,
+          description: body.work_description,
+          lorUrl: lorUrl
+        });
+      }
     }
     // Section 8: Referrals
     profile.referrals = [];
@@ -503,13 +502,13 @@ app.get('/student/profile/preview', isLoggedIn, isStudent, async (req, res) => {
 
 app.get('/student/jobs', isLoggedIn, isStudent, async (req, res) => {
   try {
-    const { role, location, company } = req.query;
+    const { skill, location, company } = req.query;
     let filter = {};
-    if (role) filter.roleType = role;
+    if (skill) filter.key_skills_mentioned = new RegExp(skill, 'i');
     if (location) filter.location = new RegExp(location, 'i');
-    if (company) filter.company = new RegExp(company, 'i');
-    
-    const jobs = await Job.find(filter).sort({ createdAt: -1 });
+    if (company) filter.company_name = new RegExp(company, 'i');
+
+    const jobs = await Job.find(filter).sort({ date: -1 });
     res.render('student/jobs', { jobs, filters: req.query });
   } catch (e) {
     console.error(e);
@@ -522,23 +521,16 @@ app.get('/student/jobs/:id', isLoggedIn, isStudent, async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
     const profile = await StudentProfile.findOne({ user: req.user._id });
-    
-    // We no longer check for existing applications in our DB
-    // const existingApplication = await Application.findOne(...) // <-- DELETE THIS
-
-    res.render('student/job-detail', { 
-      job, 
-      profile, 
-      // existingApplication, // <-- DELETE THIS
-      n8nWebhookUrl: process.env.N8N_WEBHOOK_URL // <-- ADD THIS
+    res.render('student/job-detail', {
+      job,
+      profile,
+      n8nWebhookUrl: process.env.N8N_WEBHOOK_URL
     });
   } catch (e) {
     console.error(e);
     res.redirect('/student/jobs');
   }
-});
-
-// app.post('/student/jobs/:id/apply', isLoggedIn, isStudent, applicationUpload, async (req, res) => {
+});// app.post('/student/jobs/:id/apply', isLoggedIn, isStudent, applicationUpload, async (req, res) => {
 //   try {
 //     const job = await Job.findById(req.params.id);
 //     const profile = await StudentProfile.findOne({ user: req.user._id });
@@ -570,8 +562,6 @@ app.get('/student/jobs/:id', isLoggedIn, isStudent, async (req, res) => {
 //     res.redirect('/student/jobs');
 //   }
 // });
-
-
 app.get('/student/resume-builder', isLoggedIn, isStudent, async (req, res) => {
   try {
     const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email');
@@ -633,7 +623,7 @@ app.post('/student/resume-builder/ai-review', isLoggedIn, isStudent, async (req,
     --- END RESUME ---
     `;
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const aiText = response.text();
@@ -682,7 +672,7 @@ app.get('/admin/dashboard', isLoggedIn, isAdmin, async (req, res) => {
 
 app.get('/admin/jobs', isLoggedIn, isAdmin, async (req, res) => {
   try {
-    const jobs = await Job.find({}).sort({ createdAt: -1 });
+    const jobs = await Job.find({}).sort({ date: -1 });
     res.render('admin/manage-jobs', { jobs });
   } catch (e) {
     console.error(e);
@@ -703,11 +693,14 @@ app.get('/admin/jobs/:id/edit', isLoggedIn, isAdmin, async (req, res) => {
 // CORRECTED Edit Job PUT route
 app.put('/admin/jobs/:id', isLoggedIn, isAdmin, async (req, res) => {
   try {
-    const { title, company, location, salary, description, requirements, skills } = req.body;
+    const { 
+      job_title, company_name, location, location_details, compensation, 
+      summary, link, next_step, key_skills_mentioned 
+    } = req.body;
     await Job.findByIdAndUpdate(req.params.id, {
-      title, company, location, salary, description,
-      requirements: requirements ? requirements.split(',').map(s => s.trim()) : [], // Handle comma-separated input
-      skills: skills ? skills.split(',').map(s => s.trim()) : [] // Handle comma-separated input
+      job_title, company_name, location, location_details, compensation,
+      summary, link, next_step,
+      key_skills_mentioned: key_skills_mentioned ? key_skills_mentioned.split(',').map(s => s.trim()) : []
     });
     req.flash('success', 'Job updated successfully.');
     res.redirect('/admin/jobs');
@@ -825,4 +818,44 @@ app.get('/admin/students/:id/resume-builder-preview', isLoggedIn, isAdmin, async
 // =================================================================
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
+});
+
+// --- API Routes (for client-side fetch) ---
+
+app.post('/api/apply-for-job', isLoggedIn, isStudent, async (req, res) => {
+  try {
+    const { jobId, stuId, stuName, stuMail, portfolio, resumeUrl } = req.body;
+    const webhookUrl = process.env.N8N_WEBHOOK_URL;
+
+    if (!webhookUrl) {
+      console.error("N8N_WEBHOOK_URL is not set in .env file.");
+      return res.status(500).json({ success: false, message: "Application service is not configured." });
+    }
+
+    // Construct the URL with query parameters
+    const params = new URLSearchParams();
+    params.append('job_id', jobId);
+    params.append('stu_id', stuId);
+    params.append('stu_name', stuName);
+    params.append('stu_mail', stuMail);
+    params.append('resume_url', resumeUrl);
+    if (portfolio) {
+      params.append('portfolio', portfolio);
+    }
+    const fullUrl = `${webhookUrl}?${params.toString()}`;
+
+    // Forward the request to n8n from the server
+    const n8nResponse = await axios.get(fullUrl);
+
+    // Check if n8n responded successfully
+    if (n8nResponse.status === 200) {
+      res.json({ success: true, message: "Application submitted successfully!" });
+    } else {
+      throw new Error(`n8n workflow responded with status: ${n8nResponse.status}`);
+    }
+
+  } catch (error) {
+    console.error("Error proxying application to n8n:", error.message);
+    res.status(500).json({ success: false, message: "Failed to submit application to the external service." });
+  }
 });

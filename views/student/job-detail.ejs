@@ -2,37 +2,69 @@
 
 <div class="dashboard-container">
   <%- include('../partials/student-nav') %>
-  
+
   <div class="main-content">
     <div class="card">
       <div class="job-tags" style="margin-bottom: 20px;">
-        <span class="job-tag role-type"><%= job.salary %></span>
+        <span class="job-tag role-type"><%= job.compensation %></span>
         <span class="job-tag"><%= job.location %></span>
+        <% if (job.location_details) { %>
+          <span class="job-tag"><%= job.location_details %></span>
+        <% } %>
       </div>
 
-      <h1><%= job.title %></h1>
-      <h3 class="company" style="color: var(--text-muted);"><%= job.company %></h3>
+      <h1><%= job.job_title %></h1>
+      <h3 class="company" style="color: var(--text-muted);"><%= job.company_name %></h3>
 
-      <div class="job-description" style="margin: 30px 0; white-space: pre-wrap;"><%= job.description %></div>
+      <div class="job-description" style="margin: 30px 0; white-space: pre-wrap;"><%= job.summary %></div>
 
-      <% if (job.requirements && job.requirements.length > 0) { %>
-        <h4>Requirements</h4>
-        <ul style="margin-left: 20px;">
-          <% job.requirements.forEach(req => { %>
-            <li><%= req %></li>
-          <% }) %>
-        </ul>
-      <% } %>
-      
-      <% if (job.skills && job.skills.length > 0) { %>
-        <h4 style="margin-top: 20px;">Skills</h4>
+      <% if (job.key_skills_mentioned && job.key_skills_mentioned.length > 0) { %>
+        <h4>Key Skills</h4>
         <div class="job-tags">
-          <% job.skills.forEach(skill => { %>
+          <% job.key_skills_mentioned.forEach(skill => { %>
             <span class="job-tag"><%= skill %></span>
           <% }) %>
         </div>
       <% } %>
-  </div>
-</div>
 
-<%- include('../partials/footer') %>
+      <hr style="border: none; border-top: 1px solid var(--border-color); margin: 30px 0;">
+
+      <div id="application-status"></div>
+
+      <h3>Apply Now</h3>
+      
+      <% if (job.link) { %>
+        <p>You can apply directly on the company's website or use the college's application portal.</p>
+        <div class="form-actions" style="display: flex; gap: 15px;">
+          <a href="<%= job.link %>" class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+            Apply on Company Site
+          </a>
+          <button class="btn btn-secondary" id="n8n-apply-button"
+            data-job-id="<%= job._id %>"
+            data-stu-id="<%= currentUser._id %>"
+            data-stu-name="<%= profile.personal.firstName %> <%= profile.personal.lastName %>"
+            data-stu-mail="<%= currentUser.email %>"
+            data-portfolio="<%= profile.personal.github || '' %>"
+            data-resume-url="<%= profile.resumeUrl || '' %>"
+            data-webhook-url="<%= n8nWebhookUrl %>"
+          >
+            Apply with College Portal
+          </button>
+        </div>
+      <% } else { %>
+        <p>Your application will be sent directly to the company via the college's placement portal.</p>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="n8n-apply-button"
+            data-job-id="<%= job._id %>"
+            data-stu-id="<%= currentUser._id %>"
+            data-stu-name="<%= profile.personal.firstName %> <%= profile.personal.lastName %>"
+            data-stu-mail="<%= currentUser.email %>"
+            data-portfolio="<%= profile.personal.github || '' %>"
+            data-resume-url="<%= profile.resumeUrl || '' %>"
+            data-webhook-url="<%= n8nWebhookUrl %>"
+          >
+            Apply Now
+          </button>
+        </div>
+      <% } %>
+      </div> </div> </div> <%- include('../partials/footer') %>

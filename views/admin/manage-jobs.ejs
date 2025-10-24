@@ -15,8 +15,8 @@
           <tr>
             <th>Job Title</th>
             <th>Company</th>
-            <th>CTC</th>
-            <th>Type</th>
+            <th>Compensation</th>
+            <th>Location</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -28,10 +28,10 @@
           <% } %>
           <% jobs.forEach(job => { %>
             <tr>
-              <td><a href="/admin/jobs/<%= job._id %>/manage"><%= job.title %></a></td>
-              <td><%= job.company %></td>
-              <td><%= job.ctc %></td>
-              <td><%= job.roleType %></td>
+              <td><%= job.job_title %></td>
+              <td><%= job.company_name %></td>
+              <td><%= job.compensation %></td>
+              <td><%= job.location %></td>
               <td style="display: flex; gap: 10px;">
                 <a href="/admin/jobs/<%= job._id %>/edit" class="btn btn-secondary">Edit</a>
                 

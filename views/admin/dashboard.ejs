@@ -1,5 +1,4 @@
 <%- include('../partials/header') %>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <div class="dashboard-container">
   <%- include('../partials/admin-nav') %>
@@ -11,57 +10,28 @@
 
     <div class="stats-grid">
       <div class="card stat-card">
-        <h4>Total Placed</h4>
-        <div class="stat-value"><%= stats.totalPlaced %></div>
+        <h4>Total Students</h4>
+        <div class="stat-value"><%= stats.totalStudents %></div>
       </div>
       <div class="card stat-card">
-        <h4>Avg. Package</h4>
-        <div class="stat-value"><%= stats.averagePackage %> LPA</div>
+        <h4>Total Jobs Posted</h4>
+        <div class="stat-value"><%= stats.totalJobs %></div>
       </div>
       <div class="card stat-card">
-        <h4>Highest Package</h4>
-        <div class="stat-value"><%= stats.highestPackage %> LPA</div>
+        <h4>Application Data</h4>
+        <div class="stat-value">See Google Sheets</div>
       </div>
-      <div class="card stat-card">
-        <h4>Total Applications</h4>
-        <div class="stat-value"><%= stats.totalApplications %></div>
+       <div class="card stat-card">
+        <h4>Placement Data</h4>
+        <div class="stat-value">See Google Sheets</div>
       </div>
-    </div>
-
-    <div class="card" style="height: 400px; margin-top: 30px;">
-      <canvas id="placementChart"></canvas>
-      <input type="hidden" id="chartData" value="<%= packageData %>">
     </div>
 
     <div class="card" style="margin-top: 30px;">
-      <h3>Recently Placed Students</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Student Name</th>
-            <th>Branch</th>
-            <th>Company</th>
-            <th>Role</th>
-            <th>Package</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (placedStudents.length === 0) { %>
-            <tr><td colspan="5" style="text-align: center;">No students placed yet.</td></tr>
-          <% } %>
-          <% placedStudents.forEach(app => { %>
-            <tr>
-              <td><%= app.profileSnapshot.fullName %></td>
-              <td><%= app.profileSnapshot.branch %></td>
-              <td><%= app.job.company %></td>
-              <td><%= app.job.title %></td>
-              <td><%= app.job.ctc %></td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
+      <h3>Data Notice</h3>
+      <p>Please note that detailed application and placement statistics (such as total applications, average/highest packages, and recently placed students) are now managed and tracked via an external Google Sheet, which is updated automatically by our n8n workflow.</p>
+      <p>This dashboard provides metrics available directly from this application's database.</p>
     </div>
-
   </div>
 </div>
 

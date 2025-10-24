@@ -15,22 +15,16 @@
       </div>
       <div class="form-group">
         <label for="location">Location</label>
-        <input type="text" name="location" id="location" value="<%= filters.location || '' %>" placeholder="Location">
+        <input type="text" name="location" id="location" value="<%= filters.location || '' %>" placeholder="On-site, Remote...">
       </div>
       <div class="form-group">
-        <label for="role">Role Type</label>
-        <select name="role" id="role">
-          <option value="">All Types</option>
-          <option value="Campus Drive" <%= filters.role === 'Campus Drive' ? 'selected' : '' %>>Campus Drive</option>
-          <option value="Internship" <%= filters.role === 'Internship' ? 'selected' : '' %>>Internship</option>
-          <option value="Full-time" <%= filters.role === 'Full-time' ? 'selected' : '' %>>Full-time</option>
-          <option value="Part-time" <%= filters.role === 'Part-time' ? 'selected' : '' %>>Part-time</option>
-        </select>
+        <label for="skill">Skill</label>
+        <input type="text" name="skill" id="skill" value="<%= filters.skill || '' %>" placeholder="e.g., Java, Python">
       </div>
-      <button type="submit" class="btn btn-primary">Filter</button>
+      <button type="submit" class="btn">Filter</button>
     </form>
 
-    <div class="job-list">
+    <div class="job-listings">
       <% if (jobs.length === 0) { %>
         <p>No jobs found matching your criteria.</p>
       <% } %>
@@ -38,19 +32,19 @@
       <% jobs.forEach(job => { %>
         <div class="card job-card">
           <div class="job-card-details">
-            <h3><a href="/student/jobs/<%= job._id %>"><%= job.title %></a></h3>
-            <p class="company"><%= job.company %></p>
+            <h3><a href="/student/jobs/<%= job._id %>"><%= job.job_title %></a></h3>
+            <p class="company"><%= job.company_name %></p>
             <div class="job-tags">
-              <span class="job-tag role-type"><%= job.salary %></span>
+              <span class="job-tag role-type"><%= job.compensation %></span>
               <span class="job-tag"><%= job.location %></span>
               
-              <% if (job.skills && job.skills.length > 0) { %>
-                <span class="job-tag"><%= job.skills.join(', ') %></span>
+              <% if (job.key_skills_mentioned && job.key_skills_mentioned.length > 0) { %>
+                <span class="job-tag"><%= job.key_skills_mentioned.join(', ') %></span>
               <% } %>
             </div>
           </div>
           <div class="job-card-actions">
-            <a href="/student/jobs/<%= job._id %>" class="btn btn-primary">View & Apply</a>
+            <a href="/student/jobs/<%= job._id %>" class="btn btn-primary">View Details</a>
           </div>
         </div>
       <% }) %>
