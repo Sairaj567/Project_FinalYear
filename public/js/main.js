@@ -152,3 +152,67 @@ document.addEventListener('DOMContentLoaded', () => {
   // === NEW: RESUME BUILDER LOGIC END ===
 
 });
+// === NEW N8N WEBHOOK SUBMISSION LOGIC ===
+document.addEventListener('DOMContentLoaded', () => {
+  
+  const applyButton = document.getElementById('n8n-apply-button');
+  const statusDiv = document.getElementById('application-status');
+
+  if (applyButton) {
+    applyButton.addEventListener('click', async () => {
+      // 1. Get all the data from the button's "data-*" attributes
+      const { 
+        jobId, 
+        stuId, 
+        stuName, 
+        stuMail, 
+        portfolio, 
+        webhookUrl 
+      } = applyButton.dataset;
+
+      // 2. Disable button to prevent double-clicks
+      applyButton.disabled = true;
+      applyButton.textContent = 'Applying...';
+      statusDiv.innerHTML = '';
+
+      // 3. Construct the URL with Query Parameters
+      const params = new URLSearchParams();
+      params.append('job_id', jobId);
+      params.append('stu_id', stuId);
+      params.append('sti_name', stuName);
+      params.append('stu_mail', stuMail);
+      if (portfolio) {
+        params.append('portfolio', portfolio);
+      }
+      
+      const fullUrl = `${webhookUrl}?${params.toString()}`;
+
+      try {
+        // 4. Send the GET request to the n8n webhook
+        const response = await fetch(fullUrl, { method: 'GET' });
+
+        // n8n webhooks usually respond with a 200 OK
+        if (response.ok) {
+          // Success!
+          applyButton.textContent = 'Applied!';
+          statusDiv.innerHTML = `
+            <div class="card" style="background-color: var(--status-selected); color: white; padding: 15px;">
+              Application Submitted Successfully! The company has received your details.
+            </div>`;
+        } else {
+          // Handle HTTP errors
+          throw new Error(`The server responded with status ${response.status}`);
+        }
+      } catch (error) {
+        // Handle network errors
+        console.error('Error submitting application:', error);
+        statusDiv.innerHTML = `
+          <div class="card" style="background-color: var(--status-rejected); color: white; padding: 15px;">
+            An error occurred. Please try again.
+          </div>`;
+        applyButton.disabled = false;
+        applyButton.textContent = 'Submit Application';
+      }
+    });
+  }
+});
