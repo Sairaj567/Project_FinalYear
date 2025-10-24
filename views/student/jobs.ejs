@@ -41,9 +41,12 @@
             <h3><a href="/student/jobs/<%= job._id %>"><%= job.title %></a></h3>
             <p class="company"><%= job.company %></p>
             <div class="job-tags">
-              <span class="job-tag role-type"><%= job.roleType %></span>
+              <span class="job-tag role-type"><%= job.salary %></span>
               <span class="job-tag"><%= job.location %></span>
-              <span class="job-tag"><%= job.ctc %></span>
+              
+              <% if (job.skills && job.skills.length > 0) { %>
+                <span class="job-tag"><%= job.skills.join(', ') %></span>
+              <% } %>
             </div>
           </div>
           <div class="job-card-actions">
