@@ -1,19 +1,84 @@
 <%- include('partials/header') %>
 
-<div class="landing-container">
-  <h1>Welcome to the Placement Portal</h1>
-  <p>Your one-stop solution for connecting talented students with top companies. Find your dream job or the perfect candidate.</p>
-  <div class="landing-actions">
-    <a href="/register" class="btn btn-primary">Register Now</a>
-    <a href="/login" class="btn btn-secondary">Login</a>
-  </div>
-
-  <div class="portal-info">
-    <h3>TPO Contact</h3>
-    <p>Dr. T. P. Officer</p>
-    <p>Email: tpo@university.edu</p>
-    <p>Phone: +91 12345 67890</p>
+<div class="landing-hero">
+  <div class="container">
+    <h1>Welcome to the Placement Portal</h1>
+    <p>Your one-stop solution for connecting talented students with top companies. Find your dream job or the perfect candidate.</p>
+    <div class="landing-actions">
+      <a href="/register" class="btn btn-primary">Register Now</a>
+      <a href="/login" class="btn btn-secondary">Login</a>
+    </div>
   </div>
 </div>
+
+<div class="landing-section features">
+  <div class="container">
+    <h2>Key Features</h2>
+    <div class="features-grid">
+      <div class="feature-item card">
+        <h3><i class="icon">🧑‍🎓</i> For Students</h3>
+        <ul>
+          <li>Build & Manage Your Profile</li>
+          <li>Browse & Filter Job Listings</li>
+          <li>Apply Seamlessly</li>
+          <li>Generate Resumes with Templates & AI Tips</li>
+        </ul>
+      </div>
+      <div class="feature-item card">
+        <h3><i class="icon">🧑‍💼</i> For Admins/TPO</h3>
+        <ul>
+          <li>Manage Job Postings</li>
+          <li>View Detailed Student Profiles</li>
+          <li>Access Placement Statistics</li>
+          <li>Organized Mailbox (via n8n)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="landing-section how-it-works">
+  <div class="container">
+    <h2>How It Works</h2>
+    <div class="steps-grid">
+      <div class="step-item">
+        <h3>1. Register</h3>
+        <p>Create your account as a student or admin.</p>
+      </div>
+      <div class="step-item">
+        <h3>2. Build Profile</h3>
+        <p>Students fill in their academic, skill, and experience details.</p>
+      </div>
+      <div class="step-item">
+        <h3>3. Find Opportunities</h3>
+        <p>Browse relevant job postings added by the TPO/n8n.</p>
+      </div>
+      <div class="step-item">
+        <h3>4. Apply</h3>
+        <p>Submit your application directly through the portal (via n8n).</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="landing-section cta">
+  <div class="container">
+    <h2>Ready to Start Your Career Journey?</h2>
+    <p>Join the portal today and take the next step towards your professional future.</p>
+    <a href="/register" class="btn btn-primary">Get Started</a>
+  </div>
+</div>
+
+<div class="landing-section contact">
+  <div class="container">
+     <div class="portal-info">
+      <h3>TPO Contact</h3>
+      <p>Dr. T. P. Officer</p>
+      <p>Email: tpo@university.edu</p>
+      <p>Phone: +91 12345 67890</p>
+    </div>
+  </div>
+</div>
+
 
 <%- include('partials/footer') %>
