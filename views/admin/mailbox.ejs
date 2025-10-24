@@ -1,0 +1,60 @@
+<%- include('../partials/header') %>
+
+<div class="dashboard-container">
+  <%- include('../partials/admin-nav') %>
+  
+  <div class="main-content">
+    <div class="content-header">
+      <h1>Company Mailbox</h1>
+      <p>Emails from companies, populated by your n8n workflow.</p>
+    </div>
+
+    <form action="/admin/mailbox" method="GET" class="filter-bar">
+      <div class="form-group">
+        <label for="label">Filter by Label</label>
+        <select name="label" id="label">
+          <% labels.forEach(label => { %>
+            <option value="<%= label %>" <%= currentLabel === label ? 'selected' : '' %>>
+              <%= label %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </form>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>Subject</th>
+            <th>Label</th>
+            <th>Received</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (emails.length === 0) { %>
+            <tr>
+              <td colspan="4" style="text-align: center;">No emails found matching this filter.</td>
+            </tr>
+          <% } %>
+          <% emails.forEach(email => { %>
+            <tr>
+              <td><%= email.from %></td>
+              <td>
+                <strong><%= email.subject %></strong>
+                <p style="font-size: 0.9em; color: var(--text-muted);"><%= email.body.substring(0, 100) %>...</p>
+              </td>
+              <td><span class="job-tag"><%= email.label %></span></td>
+              <td><%= new Date(email.receivedAt).toLocaleDateString() %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<%- include('../partials/footer') %>
