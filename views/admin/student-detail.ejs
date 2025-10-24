@@ -82,42 +82,34 @@
           </div>
         <% }) %>
       </section>
+
+      <section class="preview-section">
+        <h3>Documents</h3>
+        
+        <% if (profile.resumeUrl) { %>
+          <p><a href="<%= profile.resumeUrl %>" class="btn btn-secondary" target="_blank">View Uploaded Resume</a></p>
+        <% } else { %>
+          <p class="text-muted">No uploaded resume on file.</p>
+        <% } %>
+          <br><br> 
+        <p>
+          <a href="/admin/students/<%= profile.user._id %>/resume-builder-preview" class="btn btn-primary" target="_blank">
+            View Builder-Generated Resume
+          </a>
+        </p>
+        <% if (profile.certificates && profile.certificates.length > 0) { %>
+            <h5 style="margin-top: 15px;">Certificates:</h5>
+            <ul>
+              <% profile.certificates.forEach(cert => { %>
+                <li><a href="<%= cert.fileUrl %>" target="_blank"><%= cert.title || 'View Certificate' %></a></li>
+              <% }) %>
+            </ul>
+          <% } %>
+      </section>
+
     </div>
 
-    <div class="card" style="margin-top: 30px;">
-        <h3>Application History</h3>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Company</th>
-                    <th>Role</th>
-                    <th>CTC</th>
-                    <th>Applied On</th>
-                    <th>Resume</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <% if (applications.length === 0) { %>
-                    <tr>
-                        <td colspan="6" style="text-align: center;">This student has not applied to any jobs yet.</td>
-                    </tr>
-                <% } %>
-                <% applications.forEach(app => { %>
-                    <tr>
-                        <td><%= app.job.company %></td>
-                        <td><a href="/admin/jobs/<%= app.job._id %>/manage"><%= app.job.title %></a></td>
-                        <td><%= app.job.ctc %></td>
-                        <td><%= new Date(app.createdAt).toLocaleDateString() %></td>
-                        <td><a href="<%= app.appliedResumeUrl %>" class="btn btn-secondary" target="_blank">View</a></td>
-                        <td><span class="status status-<%= app.status %>"><%= app.status %></span></td>
-                    </tr>
-                <% }) %>
-            </tbody>
-        </table>
     </div>
-
-  </div>
 </div>
 
 <%- include('../partials/footer') %>
