@@ -118,41 +118,35 @@ const studentProfileSchema = new mongoose.Schema({
 });
 const StudentProfile = mongoose.model('StudentProfile', studentProfileSchema);
 
+//NEW JOB SCHEMA
 // --- Job Schema ---
 const jobSchema = new mongoose.Schema({
   title: { type: String, required: true },
   company: { type: String, required: true },
-  location: { type: String, default: 'Remote' },
-  ctc: { type: String, default: 'Not Disclosed' },
+  location: { type: String, default: 'Not Disclosed' },
+  salary: { type: String, default: 'Not Disclosed' }, // Replaced ctc
   description: { type: String, required: true },
-  roleType: {
-    type: String,
-    enum: ['Campus Drive', 'Internship', 'Full-time', 'Part-time'],
-    default: 'Full-time'
-  },
-  postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  requirements: [{ type: String }], // Added
+  skills: [{ type: String }] // Added
+  // roleType is gone, postedBy is gone
 }, { timestamps: true });
 const Job = mongoose.model('Job', jobSchema);
 
-// --- Application Schema ---
-const applicationSchema = new mongoose.Schema({
-  job: { type: mongoose.Schema.Types.ObjectId, ref: 'Job', required: true },
-  student: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  status: {
+// --- NEW Email Schema ---
+// (Your friend's n8n workflow will create documents in this collection)
+const emailSchema = new mongoose.Schema({
+  from: { type: String, required: true },
+  subject: { type: String, required: true },
+  body: { type: String, required: true },
+  label: {
     type: String,
-    enum: ['Applied', 'Pending', 'Selected', 'Rejected'],
-    default: 'Applied'
+    enum: ['Competition', 'Internship', 'Job Opportunity', 'Reply', 'URGENT', 'Other'],
+    default: 'Other'
   },
-  appliedResumeUrl: { type: String, required: true },
-  profileSnapshot: {
-    fullName: String,
-    email: String,
-    branch: String,
-    cgpa: Number
-  }
-}, { timestamps: true });
-const Application = mongoose.model('Application', applicationSchema);
-
+  receivedAt: { type: Date, default: Date.now },
+  isRead: { type: Boolean, default: false }
+});
+const Email = mongoose.model('Email', emailSchema);
 
 // =================================================================
 //                        MIDDLEWARE SETUP
@@ -278,7 +272,6 @@ const profileUpload = upload.fields([
   { name: 'certificates', maxCount: 5 },
   { name: 'work_lor', maxCount: 1 }
 ]);
-const applicationUpload = upload.single('applicationResume');
 
 // =================================================================
 //                        EMAIL (NODEMAILER)
@@ -524,62 +517,60 @@ app.get('/student/jobs', isLoggedIn, isStudent, async (req, res) => {
   }
 });
 
+// ... in app.js
 app.get('/student/jobs/:id', isLoggedIn, isStudent, async (req, res) => {
   try {
     const job = await Job.findById(req.params.id);
     const profile = await StudentProfile.findOne({ user: req.user._id });
-    const existingApplication = await Application.findOne({ job: job._id, student: req.user._id });
-    res.render('student/job-detail', { job, profile, existingApplication });
-  } catch (e) {
-    console.error(e);
-    res.redirect('/student/jobs');
-  }
-});
-
-app.post('/student/jobs/:id/apply', isLoggedIn, isStudent, applicationUpload, async (req, res) => {
-  try {
-    const job = await Job.findById(req.params.id);
-    const profile = await StudentProfile.findOne({ user: req.user._id });
-
-    let resumeUrl = profile.resumeUrl;
-    if (req.file) {
-      resumeUrl = `/uploads/applications/${req.file.filename}`;
-    }
-    if (!resumeUrl) {
-      return res.redirect(`/student/jobs/${req.params.id}`);
-    }
-
-    const newApplication = new Application({
-      job: job._id,
-      student: req.user._id,
-      appliedResumeUrl: resumeUrl,
-      profileSnapshot: {
-        fullName: `${profile.personal.firstName} ${profile.personal.lastName}`,
-        email: req.user.email,
-        branch: profile.currentCourse.branch,
-        cgpa: profile.currentCourse.aggregatePercentage
-      }
-    });
     
-    await newApplication.save();
-    res.redirect('/student/applications');
+    // We no longer check for existing applications in our DB
+    // const existingApplication = await Application.findOne(...) // <-- DELETE THIS
+
+    res.render('student/job-detail', { 
+      job, 
+      profile, 
+      // existingApplication, // <-- DELETE THIS
+      n8nWebhookUrl: process.env.N8N_WEBHOOK_URL // <-- ADD THIS
+    });
   } catch (e) {
     console.error(e);
     res.redirect('/student/jobs');
   }
 });
 
-app.get('/student/applications', isLoggedIn, isStudent, async (req, res) => {
-  try {
-    const applications = await Application.find({ student: req.user._id })
-      .populate('job')
-      .sort({ createdAt: -1 });
-    res.render('student/applications', { applications });
-  } catch (e) {
-    console.error(e);
-    res.redirect('/student/profile');
-  }
-});
+// app.post('/student/jobs/:id/apply', isLoggedIn, isStudent, applicationUpload, async (req, res) => {
+//   try {
+//     const job = await Job.findById(req.params.id);
+//     const profile = await StudentProfile.findOne({ user: req.user._id });
+
+//     let resumeUrl = profile.resumeUrl;
+//     if (req.file) {
+//       resumeUrl = `/uploads/applications/${req.file.filename}`;
+//     }
+//     if (!resumeUrl) {
+//       return res.redirect(`/student/jobs/${req.params.id}`);
+//     }
+
+//     const newApplication = new Application({
+//       job: job._id,
+//       student: req.user._id,
+//       appliedResumeUrl: resumeUrl,
+//       profileSnapshot: {
+//         fullName: `${profile.personal.firstName} ${profile.personal.lastName}`,
+//         email: req.user.email,
+//         branch: profile.currentCourse.branch,
+//         cgpa: profile.currentCourse.aggregatePercentage
+//       }
+//     });
+    
+//     await newApplication.save();
+//     res.redirect('/student/applications');
+//   } catch (e) {
+//     console.error(e);
+//     res.redirect('/student/jobs');
+//   }
+// });
+
 
 app.get('/student/resume-builder', isLoggedIn, isStudent, async (req, res) => {
   try {
@@ -660,46 +651,29 @@ app.post('/student/resume-builder/ai-review', isLoggedIn, isStudent, async (req,
 
 app.get('/admin/dashboard', isLoggedIn, isAdmin, async (req, res) => {
   try {
-    const [totalStudents, totalJobs, placedApplications, allApplications] = await Promise.all([
+    // We can only get stats from our OWN database
+    const [totalStudents, totalJobs] = await Promise.all([
       User.countDocuments({ role: 'student' }),
-      Job.countDocuments(),
-      Application.find({ status: 'Selected' }).populate('student').populate('job'),
-      Application.find()
+      Job.countDocuments()
     ]);
 
-    let totalPlaced = placedApplications.length;
-    let highestPackage = 0;
-    let packageSum = 0;
-
-    placedApplications.forEach(app => {
-      const ctcString = app.job.ctc.toLowerCase().replace('lpa', '').trim();
-      const ctcValue = parseFloat(ctcString);
-      if (!isNaN(ctcValue)) {
-        packageSum += ctcValue;
-        if (ctcValue > highestPackage) {
-          highestPackage = ctcValue;
-        }
-      }
-    });
-    const averagePackage = totalPlaced > 0 ? (packageSum / totalPlaced).toFixed(2) : 0;
-    const packageData = placedApplications
-      .map(app => parseFloat(app.job.ctc.toLowerCase().replace('lpa', '').trim()))
-      .filter(val => !isNaN(val));
-
+    // All other stats are now in Google Sheets
     const stats = {
       totalStudents,
       totalJobs,
-      totalApplications: allApplications.length,
-      totalPlaced,
-      averagePackage,
-      highestPackage
+      totalApplications: "N/A (See Google Sheets)",
+      totalPlaced: "N/A (See Google Sheets)",
+      averagePackage: "N/A",
+      highestPackage: "N/A"
     };
-
+    
+    // We also can't show placed students or package data
     res.render('admin/dashboard', { 
       stats, 
-      placedStudents: placedApplications, 
-      packageData: JSON.stringify(packageData)
+      placedStudents: [], // Pass empty array
+      packageData: "[]" // Pass empty array
     });
+
   } catch (e) {
     console.error(e);
     res.send("Error loading admin dashboard.");
@@ -726,64 +700,64 @@ app.get('/admin/jobs/:id/edit', isLoggedIn, isAdmin, async (req, res) => {
   }
 });
 
+// CORRECTED Edit Job PUT route
 app.put('/admin/jobs/:id', isLoggedIn, isAdmin, async (req, res) => {
   try {
-    const { title, company, location, ctc, description, roleType } = req.body;
+    const { title, company, location, salary, description, requirements, skills } = req.body;
     await Job.findByIdAndUpdate(req.params.id, {
-      title,
-      company,
-      location,
-      ctc,
-      description,
-      roleType
+      title, company, location, salary, description,
+      requirements: requirements ? requirements.split(',').map(s => s.trim()) : [], // Handle comma-separated input
+      skills: skills ? skills.split(',').map(s => s.trim()) : [] // Handle comma-separated input
     });
+    req.flash('success', 'Job updated successfully.');
     res.redirect('/admin/jobs');
   } catch (e) {
     console.error(e);
+    req.flash('error', 'Error updating job: ' + e.message);
     res.redirect(`/admin/jobs/${req.params.id}/edit`);
   }
 });
-
 app.delete('/admin/jobs/:id', isLoggedIn, isAdmin, async (req, res) => {
-  try {
-    await Job.findByIdAndDelete(req.params.id);
-    res.redirect('/admin/jobs');
-  } catch (e) {
-    console.error(e);
-    res.redirect('/admin/jobs');
-  }
-});
-
-app.get('/admin/jobs/:id/manage', isLoggedIn, isAdmin, async (req, res) => {
-  try {
-    const job = await Job.findById(req.params.id);
-    const applications = await Application.find({ job: req.params.id })
-      .populate({
-        path: 'student',
-        select: 'username email studentProfile',
-        populate: {
-          path: 'studentProfile',
-          select: 'fullName academic'
+    try {
+        const deletedJob = await Job.findByIdAndDelete(req.params.id);
+        if (!deletedJob) {
+             req.flash('error', 'Job not found.');
+             return res.redirect('/admin/jobs');
         }
-      });
-      
-    res.render('admin/manage-job', { job, applications });
-  } catch (e) {
-    console.error(e);
-    res.redirect('/admin/dashboard');
-  }
+        // No need to delete Applications as they are external
+        req.flash('success', 'Job deleted.');
+        res.redirect('/admin/jobs');
+    } catch (e) { console.error(e); req.flash('error', 'Error deleting job.'); res.redirect('/admin/jobs'); }
 });
 
-app.post('/admin/applications/:appId/status', isLoggedIn, isAdmin, async (req, res) => {
+
+// === NEW MAILBOX ROUTE START ===
+app.get('/admin/mailbox', isLoggedIn, isAdmin, async (req, res) => {
   try {
-    const { status } = req.body;
-    const application = await Application.findByIdAndUpdate(req.params.appId, { status });
-    res.redirect(`/admin/jobs/${application.job}/manage`);
+    let filter = {};
+    const { label } = req.query;
+
+    if (label && label !== 'All') {
+      filter.label = label;
+    }
+
+    const emails = await Email.find(filter).sort({ receivedAt: -1 });
+    const labels = ['All', 'Competition', 'Internship', 'Job Opportunity', 'Reply', 'URGENT', 'Other'];
+    
+    res.render('admin/mailbox', { 
+      emails, 
+      labels, 
+      currentLabel: label || 'All' 
+    });
   } catch (e) {
     console.error(e);
+    req.flash('error', 'Error fetching mailbox: ' + e.message);
     res.redirect('/admin/dashboard');
   }
 });
+// === NEW MAILBOX ROUTE END ===
+
+
 // === NEW STUDENT-CENTRIC ROUTES START ===
 
 // 1. Show a list of all students
@@ -800,6 +774,7 @@ app.get('/admin/students', isLoggedIn, isAdmin, async (req, res) => {
 });
 
 // 2. Show a single student's full profile and application history
+// === CORRECTED /admin/students/:id ROUTE ===
 app.get('/admin/students/:id', isLoggedIn, isAdmin, async (req, res) => {
   try {
     const studentUser = await User.findById(req.params.id);
@@ -807,22 +782,43 @@ app.get('/admin/students/:id', isLoggedIn, isAdmin, async (req, res) => {
       req.flash('error', 'Student not found.');
       return res.redirect('/admin/students');
     }
+    const profile = await StudentProfile.findOne({ user: studentUser._id }).populate('user', 'email');
+    if (!profile) {
+      req.flash('error', 'Student profile data not found.');
+      return res.redirect('/admin/students');
+    }
+    // Pass ONLY profile to the template
+    res.render('admin/student-detail', { profile }); // Application history is external
 
-    // Find the profile and all applications for this student
-    const [profile, applications] = await Promise.all([
-      StudentProfile.findOne({ user: studentUser._id }).populate('user', 'email'),
-      Application.find({ student: studentUser._id }).populate('job').sort({ createdAt: -1 })
-    ]);
-
-    res.render('admin/student-detail', { profile, applications });
   } catch (e) {
     console.error(e);
     req.flash('error', 'Error fetching student details: ' + e.message);
     res.redirect('/admin/students');
   }
 });
+// === END CORRECTION ===
 
 // === NEW STUDENT-CENTRIC ROUTES END ===
+
+// 3. Show a preview of the student's builder-resume
+app.get('/admin/students/:id/resume-builder-preview', isLoggedIn, isAdmin, async (req, res) => {
+  try {
+    const studentUser = await User.findById(req.params.id);
+    if (!studentUser) {
+      req.flash('error', 'Student not found.');
+      return res.redirect('/admin/students');
+    }
+    const profile = await StudentProfile.findOne({ user: studentUser._id }).populate('user', 'email');
+    
+    // We re-use the same EJS file, the EJS will hide the controls
+    res.render('student/resume-builder', { profile });
+
+  } catch (e) {
+    console.error(e);
+    req.flash('error', 'Error fetching resume preview: ' + e.message);
+    res.redirect('/admin/students/' + req.params.id);
+  }
+});
 
 // =================================================================
 //                        SERVER START
