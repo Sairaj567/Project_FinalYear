@@ -12,7 +12,6 @@ const MongoStore = require('connect-mongo');
 const axios = require('axios');
 const pdf = require('pdf-parse');
 const mammoth = require('mammoth');
-const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const methodOverride = require('method-override');
@@ -27,6 +26,8 @@ const { validateEnv } = require('./config/env');
 
 validateEnv();
 
+const { uploadFileToDrive, deleteFileFromDrive } = require('./services/googleDrive');
+
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000;
@@ -36,25 +37,6 @@ if (Number.isNaN(port)) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-const ensureUploadDirectories = () => {
-  const uploadDirectories = [
-    'public/uploads',
-    'public/uploads/resumes',
-    'public/uploads/certificates',
-    'public/uploads/applications',
-    'public/uploads/lors'
-  ];
-
-  uploadDirectories.forEach((relativePath) => {
-    const fullPath = path.join(__dirname, relativePath);
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true });
-    }
-  });
-};
-
-ensureUploadDirectories();
 
 let server;
 
@@ -81,6 +63,10 @@ const sanitizeRequest = (req, _res, next) => {
   });
   next();
 };
+
+const resolveDriveFolderId = (overrideKey) => process.env[overrideKey] || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+
+const formatDriveLink = (driveUploadResult) => driveUploadResult.webViewLink || driveUploadResult.webContentLink || driveUploadResult.downloadUrl;
 
 // =================================================================
 //                      DATABASE CONNECTION
@@ -168,6 +154,7 @@ const studentProfileSchema = new mongoose.Schema({
     role: { type: String },
     technologiesUsed: [{ type: String }],
     lorUrl: { type: String, default: '' },
+    lorDriveFileId: { type: String, default: '' },
     duration: { type: String },
     description: { type: String }
   }],
@@ -181,9 +168,11 @@ const studentProfileSchema = new mongoose.Schema({
   // Section 9: Main Documents
   certificates: [{
     title: { type: String },
-    fileUrl: { type: String }
+    fileUrl: { type: String },
+    driveFileId: { type: String, default: '' }
   }],
-  resumeUrl: { type: String, default: '' }
+  resumeUrl: { type: String, default: '' },
+  resumeDriveFileId: { type: String, default: '' }
 });
 const StudentProfile = mongoose.model('StudentProfile', studentProfileSchema);
 
@@ -328,25 +317,7 @@ const isAdmin = (req, res, next) => {
 // =================================================================
 //                        FILE UPLOAD (MULTER)
 // =================================================================
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    let uploadPath = 'public/uploads/';
-    if (file.fieldname === 'resume') {
-      uploadPath += 'resumes/';
-    } else if (file.fieldname === 'certificates') {
-      uploadPath += 'certificates/';
-    } else if (file.fieldname === 'applicationResume') {
-      uploadPath += 'applications/';
-    } else if (file.fieldname === 'work_lor') {
-      uploadPath += 'lors/';
-    }
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === 'application/pdf' ||
@@ -358,9 +329,9 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({ 
-  storage: storage,
-  fileFilter: fileFilter,
+const upload = multer({
+  storage,
+  fileFilter,
   limits: { fileSize: 1024 * 1024 * 5 }
 });
 
@@ -513,10 +484,35 @@ app.post('/student/profile', isLoggedIn, isStudent, profileUpload, async (req, r
         });
       }
     }
+    const resumeFolderId = resolveDriveFolderId('GOOGLE_DRIVE_RESUME_FOLDER_ID');
+    const certificateFolderId = resolveDriveFolderId('GOOGLE_DRIVE_CERTIFICATE_FOLDER_ID');
+    const lorFolderId = resolveDriveFolderId('GOOGLE_DRIVE_LOR_FOLDER_ID');
+
     // Section 7: Work Experience
-    let lorUrl = '';
-    if (files['work_lor']) {
-      lorUrl = `/uploads/lors/${files['work_lor'][0].filename}`;
+    let newLorLink = null;
+    let newLorDriveFileId = null;
+    if (files['work_lor'] && files['work_lor'][0]) {
+      try {
+        const lorFile = files['work_lor'][0];
+        const lorUpload = await uploadFileToDrive({
+          buffer: lorFile.buffer,
+          mimeType: lorFile.mimetype,
+          originalName: lorFile.originalname,
+          folderId: lorFolderId
+        });
+        newLorLink = formatDriveLink(lorUpload);
+        newLorDriveFileId = lorUpload.id;
+
+        if (profile.workExperience.length > 0 && profile.workExperience[0].lorDriveFileId) {
+          await deleteFileFromDrive(profile.workExperience[0].lorDriveFileId).catch((error) => {
+            console.warn('Unable to delete previous LOR from Drive:', error.message);
+          });
+        }
+      } catch (uploadError) {
+        console.error('LOR upload error:', uploadError);
+        req.flash('error', 'Failed to upload Letter of Recommendation to Drive. Please try again.');
+        return res.redirect('/student/profile');
+      }
     }
     // This form is designed to edit the first work experience entry.
     if (body.work_company) {
@@ -527,8 +523,9 @@ app.post('/student/profile', isLoggedIn, isStudent, profileUpload, async (req, r
         profile.workExperience[0].technologiesUsed = body.work_technologies ? body.work_technologies.split(',').map(s => s.trim()) : [];
         profile.workExperience[0].duration = body.work_duration;
         profile.workExperience[0].description = body.work_description;
-        if (lorUrl) {
-          profile.workExperience[0].lorUrl = lorUrl;
+        if (newLorLink) {
+          profile.workExperience[0].lorUrl = newLorLink;
+          profile.workExperience[0].lorDriveFileId = newLorDriveFileId;
         }
       } else {
         // Add new work experience if none exist
@@ -538,7 +535,8 @@ app.post('/student/profile', isLoggedIn, isStudent, profileUpload, async (req, r
           technologiesUsed: body.work_technologies ? body.work_technologies.split(',').map(s => s.trim()) : [],
           duration: body.work_duration,
           description: body.work_description,
-          lorUrl: lorUrl
+          lorUrl: newLorLink || '',
+          lorDriveFileId: newLorDriveFileId || ''
         });
       }
     }
@@ -561,16 +559,55 @@ app.post('/student/profile', isLoggedIn, isStudent, profileUpload, async (req, r
       });
     }
     // Section 9: Documents
-    if (files['resume']) {
-      profile.resumeUrl = `/uploads/resumes/${files['resume'][0].filename}`;
-    }
-    if (files['certificates']) {
-      files['certificates'].forEach(file => {
-        profile.certificates.push({
-          title: "Certificate",
-          fileUrl: `/uploads/certificates/${file.filename}`
+    if (files['resume'] && files['resume'][0]) {
+      try {
+        const resumeFile = files['resume'][0];
+        const previousResumeFileId = profile.resumeDriveFileId;
+        const resumeUpload = await uploadFileToDrive({
+          buffer: resumeFile.buffer,
+          mimeType: resumeFile.mimetype,
+          originalName: resumeFile.originalname,
+          folderId: resumeFolderId
         });
-      });
+
+        profile.resumeUrl = formatDriveLink(resumeUpload);
+        profile.resumeDriveFileId = resumeUpload.id;
+
+        if (previousResumeFileId) {
+          await deleteFileFromDrive(previousResumeFileId).catch((error) => {
+            console.warn('Unable to delete previous resume from Drive:', error.message);
+          });
+        }
+      } catch (uploadError) {
+        console.error('Resume upload error:', uploadError);
+        req.flash('error', 'Failed to upload resume to Drive. Please try again.');
+        return res.redirect('/student/profile');
+      }
+    }
+
+    if (files['certificates'] && files['certificates'].length > 0) {
+      try {
+        const certificateUploads = await Promise.all(files['certificates'].map(async (file) => {
+          const uploadedCertificate = await uploadFileToDrive({
+            buffer: file.buffer,
+            mimeType: file.mimetype,
+            originalName: file.originalname,
+            folderId: certificateFolderId
+          });
+
+          return {
+            title: path.parse(file.originalname).name || 'Certificate',
+            fileUrl: formatDriveLink(uploadedCertificate),
+            driveFileId: uploadedCertificate.id
+          };
+        }));
+
+        profile.certificates.push(...certificateUploads);
+      } catch (uploadError) {
+        console.error('Certificate upload error:', uploadError);
+        req.flash('error', 'Failed to upload certificate(s) to Drive. Please try again.');
+        return res.redirect('/student/profile');
+      }
     }
     
     await profile.save();
