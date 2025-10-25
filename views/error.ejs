@@ -1,0 +1,13 @@
+<%- include('partials/header') %>
+  <section class="container error-page">
+    <h1><%= status %> Error</h1>
+    <p><%= message %></p>
+    <% if (stack) { %>
+      <details class="error-stack">
+        <summary>Stack trace (development only)</summary>
+        <pre><%= stack %></pre>
+      </details>
+    <% } %>
+    <a class="btn btn-primary" href="/">Return to homepage</a>
+  </section>
+<%- include('partials/footer') %>

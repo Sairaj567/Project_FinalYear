@@ -17,19 +17,85 @@ const path = require('path');
 const multer = require('multer');
 const methodOverride = require('method-override');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const flash = require('connect-flash'); // === 1. NEW IMPORT ===
+const flash = require('connect-flash');
+const compression = require('compression');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const { validateEnv } = require('./config/env');
+
+validateEnv();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
+const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000;
+
+if (Number.isNaN(port)) {
+  throw new Error('Invalid PORT value.');
+}
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const ensureUploadDirectories = () => {
+  const uploadDirectories = [
+    'public/uploads',
+    'public/uploads/resumes',
+    'public/uploads/certificates',
+    'public/uploads/applications',
+    'public/uploads/lors'
+  ];
+
+  uploadDirectories.forEach((relativePath) => {
+    const fullPath = path.join(__dirname, relativePath);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
+  });
+};
+
+ensureUploadDirectories();
+
+let server;
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many attempts, please try again later.'
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const sanitizeRequest = (req, _res, next) => {
+  ['body', 'params', 'headers', 'query'].forEach((key) => {
+    if (req[key]) {
+      mongoSanitize.sanitize(req[key]);
+    }
+  });
+  next();
+};
 
 // =================================================================
 //                      DATABASE CONNECTION
 // =================================================================
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected successfully.'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.set('strictQuery', true);
+
+const connectToDatabase = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('MongoDB connected successfully.');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  }
+};
 
 // =================================================================
 //                        MONGOOSE SCHEMAS
@@ -158,28 +224,51 @@ const Email = mongoose.model('Email', emailSchema);
 // =================================================================
 //                        MIDDLEWARE SETUP
 // =================================================================
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
+
+app.disable('x-powered-by');
+
 app.set('view engine', 'ejs');
-app.set('views', 'views');
-app.use(express.static('public'));
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.set('views', path.join(__dirname, 'views'));
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+app.use(compression());
+app.use(morgan(isProduction ? 'combined' : 'dev'));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(sanitizeRequest);
 app.use(methodOverride('_method'));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: isProduction ? '1d' : 0
+}));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads'), {
+  maxAge: isProduction ? '1d' : 0
+}));
 
 const store = MongoStore.create({
   mongoUrl: process.env.MONGO_URI,
-  secret: process.env.SESSION_SECRET,
   touchAfter: 24 * 3600
 });
 
+store.on('error', (error) => {
+  console.error('Session store error:', error);
+});
+
 app.use(session({
-  store: store,
+  store,
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: isProduction,
   cookie: {
     httpOnly: true,
-    expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
+    sameSite: 'lax',
+    secure: isProduction,
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
@@ -208,6 +297,7 @@ app.use((req, res, next) => {
   // It will now work because app.use(flash()) is above it.
   res.locals.success = req.flash('success');
   res.locals.error = req.flash('error');
+  res.locals.isProduction = isProduction;
   next();
 });
 
@@ -299,7 +389,7 @@ app.get('/login', (req, res) => {
   res.render('login', { error: req.flash('error') });
 });
 
-app.post('/login', passport.authenticate('local', {
+app.post('/login', authLimiter, passport.authenticate('local', {
   failureRedirect: '/login',
   failureFlash: 'Invalid username or password.'
 }), (req, res) => {
@@ -314,7 +404,7 @@ app.get('/register', (req, res) => {
   res.render('register');
 });
 
-app.post('/register', async (req, res, next) => {
+app.post('/register', authLimiter, async (req, res, next) => {
   try {
     const { username, email, password, role } = req.body;
     const user = new User({ username, email, role });
@@ -341,6 +431,7 @@ app.post('/register', async (req, res, next) => {
 
   } catch (e) {
     console.error(e);
+    req.flash('error', 'Unable to register. Please try again.');
     res.redirect('/register');
   }
 });
@@ -572,7 +663,7 @@ app.get('/student/resume-builder', isLoggedIn, isStudent, async (req, res) => {
   }
 });
 
-app.post('/student/resume-builder/ai-review', isLoggedIn, isStudent, async (req, res) => {
+app.post('/student/resume-builder/ai-review', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
   try {
     const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email');
     
@@ -813,49 +904,129 @@ app.get('/admin/students/:id/resume-builder-preview', isLoggedIn, isAdmin, async
   }
 });
 
-// =================================================================
-//                        SERVER START
-// =================================================================
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
-
 // --- API Routes (for client-side fetch) ---
 
-app.post('/api/apply-for-job', isLoggedIn, isStudent, async (req, res) => {
+app.post('/api/apply-for-job', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
   try {
     const { jobId, stuId, stuName, stuMail, portfolio, resumeUrl } = req.body;
     const webhookUrl = process.env.N8N_WEBHOOK_URL;
 
-    if (!webhookUrl) {
-      console.error("N8N_WEBHOOK_URL is not set in .env file.");
-      return res.status(500).json({ success: false, message: "Application service is not configured." });
+    if (!jobId || !stuId || !stuName || !stuMail || !resumeUrl) {
+      return res.status(400).json({ success: false, message: 'Missing required application fields.' });
     }
-
-    // Construct the URL with query parameters
-    const params = new URLSearchParams();
-    params.append('job_id', jobId);
-    params.append('stu_id', stuId);
-    params.append('stu_name', stuName);
-    params.append('stu_mail', stuMail);
-    params.append('resume_url', resumeUrl);
-    if (portfolio) {
-      params.append('portfolio', portfolio);
-    }
-    const fullUrl = `${webhookUrl}?${params.toString()}`;
 
     // Forward the request to n8n from the server
-    const n8nResponse = await axios.get(fullUrl);
+    await axios.get(webhookUrl, {
+      params: {
+        job_id: jobId,
+        stu_id: stuId,
+        stu_name: stuName,
+        stu_mail: stuMail,
+        resume_url: resumeUrl,
+        portfolio: portfolio || undefined
+      },
+      timeout: 10000
+    });
 
-    // Check if n8n responded successfully
-    if (n8nResponse.status === 200) {
-      res.json({ success: true, message: "Application submitted successfully!" });
-    } else {
-      throw new Error(`n8n workflow responded with status: ${n8nResponse.status}`);
-    }
+    res.json({ success: true, message: 'Application submitted successfully!' });
 
   } catch (error) {
-    console.error("Error proxying application to n8n:", error.message);
-    res.status(500).json({ success: false, message: "Failed to submit application to the external service." });
+    console.error('Error proxying application to n8n:', error);
+    res.status(502).json({ success: false, message: 'Failed to submit application to the external service.' });
   }
+});
+
+// =================================================================
+//                        ERROR HANDLING
+// =================================================================
+app.use((req, res) => {
+  if (req.originalUrl.startsWith('/api')) {
+    return res.status(404).json({ success: false, message: 'Resource not found.' });
+  }
+
+  if (typeof res.locals.currentUser === 'undefined') {
+    res.locals.currentUser = req.user || null;
+  }
+  if (typeof res.locals.success === 'undefined') {
+    res.locals.success = [];
+  }
+  if (typeof res.locals.error === 'undefined') {
+    res.locals.error = [];
+  }
+
+  res.status(404);
+  res.render('error', {
+    status: 404,
+    message: 'The page you are looking for does not exist.',
+    stack: null
+  });
+});
+
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const status = err.status || 500;
+  const message = status === 500 ? 'An unexpected error occurred.' : err.message;
+
+  console.error('Unhandled application error:', err);
+
+  if (req.originalUrl.startsWith('/api')) {
+    return res.status(status).json({ success: false, message });
+  }
+
+  if (typeof res.locals.currentUser === 'undefined') {
+    res.locals.currentUser = req.user || null;
+  }
+  if (typeof res.locals.success === 'undefined') {
+    res.locals.success = [];
+  }
+  if (typeof res.locals.error === 'undefined') {
+    res.locals.error = [];
+  }
+
+  res.status(status);
+  res.render('error', {
+    status,
+    message,
+    stack: isProduction ? null : err.stack
+  });
+});
+
+// =================================================================
+//                        SERVER START
+// =================================================================
+const startServer = async () => {
+  await connectToDatabase();
+  server = app.listen(port, () => {
+    console.log(`Server running on port ${port} in ${process.env.NODE_ENV || 'development'} mode.`);
+  });
+};
+
+startServer();
+
+const gracefulShutdown = async (exitCode = 0) => {
+  console.log('Initiating graceful shutdown...');
+  try {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    await mongoose.connection.close(false);
+  } catch (shutdownError) {
+    console.error('Error during shutdown:', shutdownError);
+  } finally {
+    process.exit(exitCode);
+  }
+};
+
+process.on('SIGINT', () => gracefulShutdown(0));
+process.on('SIGTERM', () => gracefulShutdown(0));
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+  gracefulShutdown(1);
+});
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  gracefulShutdown(1);
 });
