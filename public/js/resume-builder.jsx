@@ -1,0 +1,1146 @@
+const { useState, useEffect, useCallback, useMemo } = React;
+const isAdminViewer = window.__CURRENT_USER_ROLE__ === 'admin';
+const initialResumeFromServer = window.__INITIAL_RESUME__;
+const initialResumeHtml = window.__INITIAL_RESUME_HTML__;
+const baseHint = typeof window.__API_BASE__ === 'string' ? window.__API_BASE__.trim() : '';
+const normalisedBase = baseHint
+  ? baseHint.replace(/\/$/, '')
+  : (window.location && window.location.origin ? window.location.origin : '');
+const BASE_API_URL = `${normalisedBase}/api/resume`;
+
+const isPlainObject = (value) => Object.prototype.toString.call(value) === '[object Object]';
+
+const toSerializable = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  const valueType = typeof value;
+  if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => toSerializable(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (isPlainObject(value)) {
+    const cloned = {};
+    Object.keys(value).forEach((key) => {
+      const serialised = toSerializable(value[key]);
+      if (serialised !== undefined) {
+        cloned[key] = serialised;
+      }
+    });
+    return cloned;
+  }
+
+  return undefined;
+};
+
+const safeSerialize = (value) => JSON.stringify(toSerializable(value));
+
+const LucideIcon = ({ name, className = 'w-5 h-5', onClick }) => {
+  try {
+    if (window.lucide && window.lucide.icons) {
+      const Icon = window.lucide.icons[name] || window.lucide.icons.AlertCircle;
+
+      if (Icon && typeof Icon.toSvg === 'function') {
+        return (
+          <span
+            onClick={onClick}
+            className={className}
+            dangerouslySetInnerHTML={{ __html: Icon.toSvg({ class: className }) }}
+          />
+        );
+      }
+
+      if (Icon && typeof Icon === 'function') {
+        const svg = Icon({ class: className });
+        if (typeof svg === 'string') {
+          return (
+            <span
+              onClick={onClick}
+              className={className}
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          );
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Lucide render fallback', error);
+  }
+
+  return <i onClick={onClick} data-lucide={name} className={className}></i>;
+};
+
+const TagInput = ({ tags, setTags, label, disabled }) => {
+  const [inputValue, setInputValue] = useState('');
+
+  const handleKeyDown = (event) => {
+    if (disabled) {
+      return;
+    }
+
+    if ((event.key === 'Enter' || event.key === ',') && inputValue.trim()) {
+      event.preventDefault();
+      const newTag = inputValue.trim().replace(/,$/, '');
+      if (newTag && !tags.includes(newTag)) {
+        setTags([...tags, newTag]);
+        setInputValue('');
+      }
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    if (disabled) {
+      return;
+    }
+    setTags(tags.filter((tag) => tag !== tagToRemove));
+  };
+
+  return (
+    <div className="relative mt-2">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <div className={`flex flex-wrap gap-2 p-2 border border-gray-300 rounded-md bg-white min-h-[44px] ${disabled ? 'opacity-75 cursor-not-allowed' : ''}`}>
+        {tags.map((tag, index) => (
+          <span
+            key={index}
+            className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-deep-purple/10 text-deep-purple rounded-full transition duration-150 ease-in-out hover:bg-deep-purple/20 cursor-pointer"
+            onClick={() => removeTag(tag)}
+          >
+            {tag}
+            {!disabled && <LucideIcon name="X" className="w-3 h-3 ml-1" />}
+          </span>
+        ))}
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(event) => setInputValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={disabled ? '' : 'Type a skill and press Enter or comma'}
+          className="flex-grow p-0 border-none focus:ring-0 text-sm focus:outline-none"
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+};
+
+const ToastNotification = ({ message, type, onClose }) => {
+  const baseClasses = 'fixed bottom-5 right-5 p-4 rounded-lg shadow-xl text-white flex items-center space-x-3 z-50 transition-transform duration-300 ease-out';
+  const typeClasses = {
+    success: 'bg-success-green',
+    error: 'bg-error-rose',
+    info: 'bg-blue-accent'
+  };
+  const iconName = {
+    success: 'CheckCircle',
+    error: 'AlertTriangle',
+    info: 'Info'
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [message, onClose]);
+
+  return (
+    <div className={`${baseClasses} ${typeClasses[type] || typeClasses.info}`}>
+      <LucideIcon name={iconName[type] || iconName.info} className="w-6 h-6" />
+      <span className="font-medium">{message}</span>
+      <button onClick={onClose} className="ml-4 opacity-75 hover:opacity-100">
+        <LucideIcon name="X" className="w-5 h-5" />
+      </button>
+    </div>
+  );
+};
+
+const ProgressCircle = ({ score, category }) => {
+  const radius = 50;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+
+  let color = 'text-gray-300';
+  if (score >= 80) color = 'text-success-green';
+  else if (score >= 60) color = 'text-warning-amber';
+  else color = 'text-error-rose';
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg className="w-32 h-32 transform -rotate-90">
+        <circle
+          className="text-gray-200"
+          strokeWidth="10"
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx="64"
+          cy="64"
+        />
+        <circle
+          className={`${color} transition-all duration-1000 ease-out`}
+          strokeWidth="10"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          stroke="currentColor"
+          fill="transparent"
+          r={radius}
+          cx="64"
+          cy="64"
+        />
+      </svg>
+      <div className="absolute flex flex-col justify-center items-center h-32 w-32">
+        <span className={`text-3xl font-bold ${color}`}>{score}</span>
+        <span className="text-xs font-medium text-gray-500">{category}</span>
+      </div>
+    </div>
+  );
+};
+
+const AnimatedProgressBar = ({ value, label, max = 100, colorClass = 'bg-deep-purple' }) => {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  return (
+    <div className="my-2">
+      <div className="flex justify-between mb-1">
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-sm font-medium text-gray-700">{value}%</span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2.5">
+        <div
+          className={`h-2.5 rounded-full transition-all duration-1000 ease-out ${colorClass}`}
+          style={{ width: `${percentage}%` }}
+        ></div>
+      </div>
+    </div>
+  );
+};
+
+const InputField = React.memo(({ label, id, value, onChange, placeholder = '', disabled = false }) => (
+  <div className="relative mt-6">
+    <input
+      type="text"
+      id={id}
+      value={value}
+      onChange={(event) => onChange && onChange(event.target.value)}
+      placeholder={placeholder || ' '}
+      className={`peer h-10 w-full border-b-2 border-gray-300 text-gray-900 placeholder-transparent focus:outline-none focus:border-deep-purple/70 transition duration-200 text-sm bg-transparent ${disabled ? 'opacity-75 cursor-not-allowed' : ''}`}
+      disabled={disabled}
+    />
+    <label
+      htmlFor={id}
+      className="absolute left-0 -top-3.5 text-sm text-gray-600 transition-all peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-400 peer-placeholder-shown:top-2 peer-focus:-top-3.5 peer-focus:text-deep-purple/70 peer-focus:text-sm"
+    >
+      {label}
+    </label>
+  </div>
+));
+
+const TextareaField = React.memo(({ label, id, value, onChange, wordLimit, charCount, disabled = false }) => (
+  <div className="relative mt-6">
+    <textarea
+      id={id}
+      value={value}
+      onChange={(event) => onChange && onChange(event.target.value)}
+      placeholder=" "
+      rows="3"
+      className={`peer w-full border-2 border-gray-300 rounded-lg text-gray-900 placeholder-transparent focus:outline-none focus:border-deep-purple/70 transition duration-200 p-3 text-sm bg-transparent ${disabled ? 'opacity-75 cursor-not-allowed' : ''}`}
+      disabled={disabled}
+    ></textarea>
+    <label
+      htmlFor={id}
+      className="absolute left-3 -top-2.5 text-sm text-gray-600 bg-white px-1 transition-all peer-focus:text-deep-purple/70"
+    >
+      {label}
+    </label>
+    <div className="text-right text-xs text-gray-500 mt-1">
+      {charCount} / {wordLimit} characters
+    </div>
+  </div>
+));
+
+const PersonalInformation = React.memo(({ resumeData, updateResumeData, disabled }) => (
+  <div className="p-6">
+    <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2">Personal Information</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+      <InputField label="Full Name" id="name" value={resumeData.personalInfo.name} onChange={(value) => updateResumeData('personalInfo', 'name', value)} disabled={disabled} />
+      <InputField label="Email Address" id="email" value={resumeData.personalInfo.email} onChange={(value) => updateResumeData('personalInfo', 'email', value)} disabled={disabled} />
+      <InputField label="Phone Number" id="phone" value={resumeData.personalInfo.phone} onChange={(value) => updateResumeData('personalInfo', 'phone', value)} disabled={disabled} />
+      <InputField label="LinkedIn URL" id="linkedin" value={resumeData.personalInfo.linkedin} onChange={(value) => updateResumeData('personalInfo', 'linkedin', value)} disabled={disabled} />
+      <InputField label="GitHub URL" id="github" value={resumeData.personalInfo.github} onChange={(value) => updateResumeData('personalInfo', 'github', value)} disabled={disabled} />
+      <InputField label="Portfolio URL" id="portfolio" value={resumeData.personalInfo.portfolio} onChange={(value) => updateResumeData('personalInfo', 'portfolio', value)} disabled={disabled} />
+    </div>
+  </div>
+));
+
+const EducationSection = React.memo(({ resumeData, updateResumeData, addSectionItem, removeSectionItem, disabled }) => (
+  <div className="p-6">
+    <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2 flex justify-between items-center">
+      Education
+      {!disabled && (
+        <button
+          onClick={() => addSectionItem('education', { college: '', degree: '', cgpa: '', year: '', coursework: '' })}
+          className="text-sm font-semibold text-deep-purple hover:text-deep-purple/80 transition duration-150 flex items-center"
+        >
+          <LucideIcon name="PlusCircle" className="w-4 h-4 mr-1" /> Add
+        </button>
+      )}
+    </h3>
+    {resumeData.education.map((edu, index) => (
+      <div key={index} className="mb-6 p-4 border rounded-lg bg-bg-light relative">
+        {!disabled && resumeData.education.length > 1 && (
+          <button onClick={() => removeSectionItem('education', index)} className="absolute top-2 right-2 text-gray-400 hover:text-error-rose transition">
+            <LucideIcon name="Trash2" className="w-5 h-5" />
+          </button>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+          <InputField label="College/University" value={edu.college} onChange={(value) => updateResumeData('education', index, 'college', value)} disabled={disabled} />
+          <InputField label="Degree/Major" value={edu.degree} onChange={(value) => updateResumeData('education', index, 'degree', value)} disabled={disabled} />
+          <InputField label="CGPA/GPA" value={edu.cgpa} onChange={(value) => updateResumeData('education', index, 'cgpa', value)} disabled={disabled} />
+          <InputField label="Year of Graduation" value={edu.year} onChange={(value) => updateResumeData('education', index, 'year', value)} disabled={disabled} />
+        </div>
+        <InputField label="Relevant Coursework (comma separated)" value={edu.coursework} onChange={(value) => updateResumeData('education', index, 'coursework', value)} disabled={disabled} />
+      </div>
+    ))}
+  </div>
+));
+
+const ExperienceSection = React.memo(({ resumeData, updateResumeData, addSectionItem, removeSectionItem, disabled }) => (
+  <div className="p-6">
+    <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2 flex justify-between items-center">
+      Experience/Internships
+      {!disabled && (
+        <button
+          onClick={() => addSectionItem('experience', { company: '', role: '', duration: '', description: [''] })}
+          className="text-sm font-semibold text-deep-purple hover:text-deep-purple/80 transition duration-150 flex items-center"
+        >
+          <LucideIcon name="PlusCircle" className="w-4 h-4 mr-1" /> Add
+        </button>
+      )}
+    </h3>
+    {resumeData.experience.map((exp, expIndex) => (
+      <div key={expIndex} className="mb-6 p-4 border rounded-lg bg-bg-light relative">
+        {!disabled && resumeData.experience.length > 1 && (
+          <button onClick={() => removeSectionItem('experience', expIndex)} className="absolute top-2 right-2 text-gray-400 hover:text-error-rose transition">
+            <LucideIcon name="Trash2" className="w-5 h-5" />
+          </button>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+          <InputField label="Company Name" value={exp.company} onChange={(value) => updateResumeData('experience', expIndex, 'company', value)} disabled={disabled} />
+          <InputField label="Role/Title" value={exp.role} onChange={(value) => updateResumeData('experience', expIndex, 'role', value)} disabled={disabled} />
+          <InputField label="Duration (e.g., May 2024 - Aug 2024)" value={exp.duration} onChange={(value) => updateResumeData('experience', expIndex, 'duration', value)} disabled={disabled} />
+        </div>
+        <div className="mt-4">
+          <label className="text-sm font-medium text-gray-700 block mb-2">Key Achievements/Bullet Points (One per line)</label>
+          {exp.description.map((bullet, bulletIndex) => (
+            <div key={bulletIndex} className="flex items-center space-x-2 mb-2">
+              <LucideIcon name="Dot" className="w-6 h-6 text-deep-purple" />
+              <input
+                type="text"
+                value={bullet}
+                onChange={(event) =>
+                  updateResumeData('experience', expIndex, 'description', {
+                    index: bulletIndex,
+                    text: event.target.value
+                  })
+                }
+                placeholder="Achieved X by doing Y"
+                className={`w-full border-b border-gray-300 text-gray-900 focus:outline-none focus:border-teal-accent transition duration-150 text-sm bg-transparent ${disabled ? 'opacity-75 cursor-not-allowed' : ''}`}
+                disabled={disabled}
+              />
+              {!disabled && (
+                <button
+                  onClick={() => {
+                    const newDesc = exp.description.filter((_, i) => i !== bulletIndex);
+                    updateResumeData('experience', expIndex, 'description', { index: null, text: newDesc });
+                  }}
+                  className="text-gray-400 hover:text-error-rose transition"
+                >
+                  <LucideIcon name="MinusCircle" className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {!disabled && (
+            <button
+              onClick={() =>
+                updateResumeData('experience', expIndex, 'description', {
+                  index: exp.description.length,
+                  text: ''
+                })
+              }
+              className="text-xs font-semibold text-teal-accent hover:text-teal-accent/80 transition duration-150 mt-2 flex items-center"
+            >
+              <LucideIcon name="PlusCircle" className="w-3 h-3 mr-1" /> Add Bullet
+            </button>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+));
+
+const ProjectsSection = React.memo(({ resumeData, updateResumeData, addSectionItem, removeSectionItem, disabled }) => (
+  <div className="p-6">
+    <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2 flex justify-between items-center">
+      Projects
+      {!disabled && (
+        <button
+          onClick={() => addSectionItem('projects', { title: '', technologies: '', description: '', githubLink: '' })}
+          className="text-sm font-semibold text-deep-purple hover:text-deep-purple/80 transition duration-150 flex items-center"
+        >
+          <LucideIcon name="PlusCircle" className="w-4 h-4 mr-1" /> Add
+        </button>
+      )}
+    </h3>
+    {resumeData.projects.map((proj, index) => (
+      <div key={index} className="mb-6 p-4 border rounded-lg bg-bg-light relative">
+        {!disabled && resumeData.projects.length > 1 && (
+          <button onClick={() => removeSectionItem('projects', index)} className="absolute top-2 right-2 text-gray-400 hover:text-error-rose transition">
+            <LucideIcon name="Trash2" className="w-5 h-5" />
+          </button>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+          <InputField label="Project Title" value={proj.title} onChange={(value) => updateResumeData('projects', index, 'title', value)} disabled={disabled} />
+          <InputField label="Technologies Used (comma separated)" value={proj.technologies} onChange={(value) => updateResumeData('projects', index, 'technologies', value)} disabled={disabled} />
+          <InputField label="GitHub Link" value={proj.githubLink} onChange={(value) => updateResumeData('projects', index, 'githubLink', value)} disabled={disabled} />
+        </div>
+        <TextareaField
+          label="Description/Impact"
+          value={proj.description}
+          onChange={(value) => updateResumeData('projects', index, 'description', value)}
+          wordLimit={250}
+          charCount={proj.description.length}
+          disabled={disabled}
+        />
+      </div>
+    ))}
+  </div>
+));
+
+const ResumeBuilderTab = React.memo(({ resumeData, setResumeData, updateResumeData, addSectionItem, removeSectionItem, disabled }) => (
+  <div className="space-y-6">
+    <div className="p-6 bg-white shadow-lg rounded-xl border border-deep-purple/10">
+      <h2 className="text-2xl font-extrabold text-deep-purple mb-4">Target Role & Core Skills</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <InputField
+          label="Desired Job Title (For AI Context)"
+          value={resumeData.targetRole}
+          onChange={(value) => setResumeData((prev) => ({ ...prev, targetRole: value }))}
+          placeholder="e.g., Senior Software Engineer"
+          disabled={disabled}
+        />
+      </div>
+      <TagInput
+        label="Technical Skills"
+        tags={resumeData.skills}
+        setTags={(newTags) => setResumeData((prev) => ({ ...prev, skills: newTags }))}
+        disabled={disabled}
+      />
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10">
+        <PersonalInformation resumeData={resumeData} updateResumeData={updateResumeData} disabled={disabled} />
+      </div>
+      <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10">
+        <EducationSection
+          resumeData={resumeData}
+          updateResumeData={updateResumeData}
+          addSectionItem={addSectionItem}
+          removeSectionItem={removeSectionItem}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+
+    <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10">
+      <ExperienceSection
+        resumeData={resumeData}
+        updateResumeData={updateResumeData}
+        addSectionItem={addSectionItem}
+        removeSectionItem={removeSectionItem}
+        disabled={disabled}
+      />
+    </div>
+
+    <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10">
+      <ProjectsSection
+        resumeData={resumeData}
+        updateResumeData={updateResumeData}
+        addSectionItem={addSectionItem}
+        removeSectionItem={removeSectionItem}
+        disabled={disabled}
+      />
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+      <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10 p-6">
+        <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2">Achievements & Certifications</h3>
+        <TextareaField
+          label="List major awards, patents, or certifications"
+          id="achievements"
+          value={resumeData.achievements}
+          onChange={(value) => setResumeData((prev) => ({ ...prev, achievements: value }))}
+          wordLimit={400}
+          charCount={resumeData.achievements.length}
+          disabled={disabled}
+        />
+      </div>
+      <div className="bg-white shadow-lg rounded-xl border border-deep-purple/10 p-6">
+        <h3 className="text-xl font-bold text-text-dark mb-4 border-b pb-2">Extracurricular Activities</h3>
+        <TextareaField
+          label="Clubs, leadership roles, volunteer work, etc."
+          id="extracurriculars"
+          value={resumeData.extracurriculars}
+          onChange={(value) => setResumeData((prev) => ({ ...prev, extracurriculars: value }))}
+          wordLimit={400}
+          charCount={resumeData.extracurriculars.length}
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  </div>
+));
+
+const ResumePreviewTab = React.memo(({ isProcessing, grading }) => (
+  <div className="p-8 bg-white shadow-2xl rounded-xl max-w-4xl mx-auto h-[80vh] overflow-y-auto">
+    <h2 className="text-3xl font-bold text-deep-purple border-b-4 border-teal-accent/50 pb-2 mb-4">Live Resume Preview</h2>
+
+    {isProcessing ? (
+      <div className="flex flex-col items-center justify-center h-full text-lg text-gray-500">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-4 border-deep-purple border-t-transparent mb-4"></div>
+        <p>AI is generating content and scoring...</p>
+      </div>
+    ) : grading.generatedContent ? (
+      <div className="resume-document" dangerouslySetInnerHTML={{ __html: grading.generatedContent }} />
+    ) : (
+      <div className="text-center text-gray-500 p-20">
+        <LucideIcon name="ClipboardList" className="w-12 h-12 mx-auto mb-4" />
+        <p className="text-lg">
+          Click <strong>'Generate &amp; Grade with AI'</strong> to see your professional, enhanced resume here.
+        </p>
+        <p className="text-sm">Content is formatted for a clean, ATS-friendly design.</p>
+      </div>
+    )}
+  </div>
+));
+
+const ResumeGradeTab = React.memo(({ grading, isProcessing, handleApplySuggestions, handleDownloadPDF, actionPlan }) => {
+  const hasSuggestions = Array.isArray(grading.suggestions) && grading.suggestions.length > 0;
+
+  return (
+    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="bg-white p-8 shadow-2xl rounded-xl border-t-4 border-teal-accent">
+      <h2 className="text-3xl font-bold text-deep-purple flex items-center mb-4 border-b pb-3">
+        <LucideIcon name="Rocket" className="w-8 h-8 mr-3 text-teal-accent" />
+        AI Resume Grading Dashboard
+      </h2>
+
+      <div className="flex justify-around items-start flex-wrap gap-6 py-4">
+        <ProgressCircle score={grading.overallScore} category="Overall Score" />
+        <div className="space-y-4 flex-grow max-w-md">
+          <AnimatedProgressBar
+            value={grading.atsScore}
+            label="ATS Compatibility Score"
+            colorClass={grading.atsScore >= 80 ? 'bg-success-green' : grading.atsScore >= 60 ? 'bg-warning-amber' : 'bg-error-rose'}
+          />
+          <AnimatedProgressBar
+            value={grading.contentScore}
+            label="Content Quality Score"
+            colorClass={grading.contentScore >= 80 ? 'bg-success-green' : grading.contentScore >= 60 ? 'bg-warning-amber' : 'bg-error-rose'}
+          />
+          <AnimatedProgressBar
+            value={grading.designScore}
+            label="Formatting & Design Score"
+            colorClass={grading.designScore >= 80 ? 'bg-success-green' : grading.designScore >= 60 ? 'bg-warning-amber' : 'bg-error-rose'}
+          />
+          <AnimatedProgressBar
+            value={grading.completenessScore}
+            label="Completeness Score"
+            colorClass={grading.completenessScore >= 80 ? 'bg-success-green' : grading.completenessScore >= 60 ? 'bg-warning-amber' : 'bg-error-rose'}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-6 border-t mt-4 space-x-4">
+        <button
+          onClick={handleApplySuggestions}
+          disabled={isProcessing || !hasSuggestions}
+          className="px-6 py-2 bg-teal-accent text-white font-semibold rounded-lg shadow-md hover:bg-teal-accent/80 transition duration-150 flex items-center disabled:opacity-50"
+        >
+          <LucideIcon name="Sparkles" className="w-5 h-5 mr-2" />
+          Apply AI Suggestions
+        </button>
+        <button
+          onClick={() => handleDownloadPDF('latest')}
+          disabled={isProcessing}
+          className="px-6 py-2 bg-deep-purple text-white font-semibold rounded-lg shadow-md hover:bg-deep-purple/80 transition duration-150 flex items-center disabled:opacity-50"
+        >
+          <LucideIcon name="Download" className="w-5 h-5 mr-2" />
+          Download PDF
+        </button>
+      </div>
+    </div>
+
+    <div className="bg-white p-8 shadow-2xl rounded-xl border border-gray-200">
+      <h3 className="text-2xl font-bold text-error-rose flex items-center mb-4 border-b pb-2">
+        <LucideIcon name="Lightbulb" className="w-6 h-6 mr-2 text-error-rose" />
+        Detailed Improvement Suggestions
+      </h3>
+      {hasSuggestions ? (
+        <ul className="space-y-4">
+          {grading.suggestions.map((suggestion, index) => (
+            <li key={index} className="flex items-start p-3 bg-gray-50 rounded-lg border-l-4 border-error-rose/50">
+              <span
+                className={`text-xl font-bold mr-3 ${
+                  suggestion.priority === 'High'
+                    ? 'text-error-rose'
+                    : suggestion.priority === 'Medium'
+                    ? 'text-warning-amber'
+                    : 'text-success-green'
+                }`}
+              >
+                [{suggestion.priority}]
+              </span>
+              <div className="text-sm">
+                <p className="font-semibold text-text-dark">{suggestion.type || 'General'}:</p>
+                <p className="text-gray-700">{suggestion.detail}</p>
+                {suggestion.example && <p className="mt-1 italic text-gray-500">Example: {suggestion.example}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-gray-500 text-sm">Run the AI grading workflow to receive targeted improvement ideas.</p>
+      )}
+    </div>
+
+    {Array.isArray(actionPlan) && actionPlan.length > 0 && (
+      <div className="bg-white p-8 shadow-2xl rounded-xl border border-blue-accent/30">
+        <h3 className="text-2xl font-bold text-blue-accent flex items-center mb-4 border-b pb-2">
+          <LucideIcon name="ClipboardCheck" className="w-6 h-6 mr-2 text-blue-accent" />
+          AI Revision Checklist
+        </h3>
+        <ol className="space-y-3 list-decimal pl-6">
+          {actionPlan.map((item, index) => (
+            <li key={index} className="bg-blue-accent/5 border border-blue-accent/20 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-text-dark">{item.task}</span>
+                <span className={`text-xs font-bold uppercase ${
+                  item.priority === 'High'
+                    ? 'text-error-rose'
+                    : item.priority === 'Medium'
+                    ? 'text-warning-amber'
+                    : 'text-success-green'
+                }`}>
+                  {item.priority || 'Medium'}
+                </span>
+              </div>
+              {item.example && <p className="text-xs text-gray-600">Example: {item.example}</p>}
+            </li>
+          ))}
+        </ol>
+      </div>
+    )}
+    </div>
+  );
+});
+
+const TabButton = React.memo(({ tabName, label, active, setActive, icon }) => (
+  <button
+    onClick={() => setActive(tabName)}
+    className={`py-3 px-6 text-sm font-semibold transition duration-150 flex items-center rounded-t-lg ${
+      active === tabName ? 'text-deep-purple border-b-4 border-deep-purple bg-white shadow-inner' : 'text-gray-500 hover:text-deep-purple/80 hover:bg-gray-100'
+    }`}
+  >
+    <LucideIcon name={icon} className="w-4 h-4 mr-2" />
+    {label}
+  </button>
+));
+
+const initialResumeData = {
+  personalInfo: { name: '', email: '', phone: '', linkedin: '', github: '', portfolio: '' },
+  education: [{ college: '', degree: '', cgpa: '', year: '', coursework: '' }],
+  skills: ['JavaScript', 'React', 'Tailwind CSS'],
+  experience: [{ company: '', role: '', duration: '', description: [''] }],
+  projects: [{ title: '', technologies: '', description: '', githubLink: '' }],
+  achievements: '',
+  extracurriculars: '',
+  targetRole: 'Software Developer'
+};
+
+const initialGradingState = {
+  overallScore: 0,
+  atsScore: 0,
+  contentScore: 0,
+  designScore: 0,
+  completenessScore: 0,
+  suggestions: [],
+  generatedContent: ''
+};
+
+const mergeResumeData = (incoming) => {
+  if (!incoming || typeof incoming !== 'object') return initialResumeData;
+
+  const safeArray = (value, fallback) => (Array.isArray(value) && value.length ? value : fallback);
+  const toStringArray = (value, fallback) =>
+    Array.isArray(value)
+      ? value
+          .map((item) => {
+            if (typeof item === 'string') {
+              return item;
+            }
+            if (item && typeof item === 'object' && item.name) {
+              return item.name;
+            }
+            return '';
+          })
+          .filter(Boolean)
+      : fallback;
+
+  return {
+    ...initialResumeData,
+    ...incoming,
+    personalInfo: { ...initialResumeData.personalInfo, ...(incoming.personalInfo || incoming.personal || {}) },
+    education: safeArray(incoming.education, initialResumeData.education).map((edu) => ({
+      college: edu.college || '',
+      degree: edu.degree || '',
+      cgpa: edu.cgpa || '',
+      year: edu.year || '',
+      coursework: edu.coursework || ''
+    })),
+    experience: safeArray(incoming.experience, initialResumeData.experience).map((exp) => ({
+      company: exp.company || '',
+      role: exp.role || '',
+      duration: exp.duration || '',
+      description: safeArray(exp.description, ['']).map((point) => point || '')
+    })),
+    projects: safeArray(incoming.projects, initialResumeData.projects).map((proj) => ({
+      title: proj.title || '',
+      technologies: proj.technologies || '',
+      description: proj.description || '',
+      githubLink: proj.githubLink || proj.github || ''
+    })),
+    skills: toStringArray(incoming.skills, initialResumeData.skills),
+    achievements: incoming.achievements || '',
+    extracurriculars: incoming.extracurriculars || '',
+    targetRole: incoming.targetRole || incoming.desiredRole || initialResumeData.targetRole
+  };
+};
+
+const buildActionPlanFromSuggestions = (suggestions = []) => {
+  if (!Array.isArray(suggestions) || !suggestions.length) {
+    return [];
+  }
+
+  const plan = suggestions
+    .map((suggestion) => {
+      if (!suggestion || typeof suggestion !== 'object') {
+        return null;
+      }
+      const task = (suggestion.detail || suggestion.text || '').trim();
+      if (!task) {
+        return null;
+      }
+      return {
+        priority: suggestion.priority || 'Medium',
+        task,
+        example: suggestion.example || null
+      };
+    })
+    .filter(Boolean);
+
+  return plan.slice(0, 10);
+};
+
+const initialGradingFromServer = initialResumeHtml
+  ? { ...initialGradingState, generatedContent: initialResumeHtml }
+  : initialGradingState;
+
+const App = () => {
+  const [activeTab, setActiveTab] = useState(isAdminViewer ? 'preview' : 'builder');
+  const [resumeData, setResumeData] = useState(initialResumeData);
+  const [grading, setGrading] = useState(initialGradingFromServer);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [actionPlan, setActionPlan] = useState([]);
+
+  useEffect(() => {
+    if (initialResumeFromServer) {
+      setResumeData(mergeResumeData(initialResumeFromServer));
+      setActionPlan(buildActionPlanFromSuggestions(initialGradingFromServer.suggestions));
+    }
+  }, []);
+
+  const totalFields = 20;
+  const filledFields = useMemo(() => {
+    let count = 0;
+    Object.values(resumeData.personalInfo).forEach((value) => (value.trim ? value.trim() && count++ : null));
+    resumeData.education.forEach((edu) => Object.values(edu).forEach((value) => (value.trim ? value.trim() && count++ : null)));
+    resumeData.experience.forEach((exp) => {
+      Object.entries(exp)
+        .filter(([key]) => key !== 'description')
+        .forEach(([, value]) => (value && value.trim ? value.trim() && count++ : null));
+      exp.description.forEach((desc) => (desc.trim ? desc.trim() && count++ : null));
+    });
+    resumeData.projects.forEach((proj) => Object.values(proj).forEach((value) => (value && value.trim ? value.trim() && count++ : null)));
+    if (resumeData.achievements.trim()) count++;
+    if (resumeData.extracurriculars.trim()) count++;
+    if (resumeData.skills.length > 0) count++;
+    return count;
+  }, [resumeData]);
+
+  const progressPercentage = useMemo(() => Math.min(100, Math.ceil((filledFields / totalFields) * 100)), [filledFields]);
+
+  const updateResumeData = useCallback((section, a, b, c) => {
+    setResumeData((prev) => {
+      const sectionValue = prev[section];
+
+      if (Array.isArray(sectionValue) && typeof a === 'number') {
+        const index = a;
+        const key = b;
+        const value = c;
+
+        const newArray = sectionValue.map((item, idx) => {
+          if (idx !== index) return item;
+
+          if (key === 'description') {
+            if (value && typeof value === 'object' && Array.isArray(value.text)) {
+              return { ...item, description: value.text };
+            }
+            if (value && typeof value === 'object' && value.index !== undefined) {
+              const newDesc = Array.isArray(item.description) ? [...item.description] : [];
+              if (value.index === null && Array.isArray(value.text)) {
+                return { ...item, description: value.text };
+              }
+              newDesc[value.index] = value.text;
+              return { ...item, description: newDesc };
+            }
+            return { ...item, description: value };
+          }
+
+          return { ...item, [key]: value };
+        });
+
+        return { ...prev, [section]: newArray };
+      }
+
+      if (sectionValue && typeof sectionValue === 'object' && !Array.isArray(sectionValue)) {
+        const key = a;
+        const value = b;
+        return { ...prev, [section]: { ...sectionValue, [key]: value } };
+      }
+
+      const value = a;
+      return { ...prev, [section]: value };
+    });
+  }, []);
+
+  const addSectionItem = useCallback((section, newItem) => {
+    setResumeData((prev) => ({ ...prev, [section]: [...prev[section], newItem] }));
+  }, []);
+
+  const removeSectionItem = useCallback((section, index) => {
+    setResumeData((prev) => ({ ...prev, [section]: prev[section].filter((_, i) => i !== index) }));
+  }, []);
+
+  useEffect(() => {
+    if (isAdminViewer || activeTab !== 'builder' || filledFields < 1) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await fetch(`${BASE_API_URL}/save-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(resumeData)
+        });
+      } catch (error) {
+        console.warn('Auto-save failed', error);
+      }
+    }, 30000);
+
+    return () => clearTimeout(timer);
+  }, [resumeData, activeTab, filledFields]);
+
+  const handleFetchProfile = async () => {
+    if (isAdminViewer) {
+      setToast({ message: 'Preview mode: fetching is disabled for admins.', type: 'info' });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`${BASE_API_URL}/fetch-profile`, { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to fetch profile data.');
+      const profile = await response.json();
+      setResumeData(mergeResumeData(profile));
+      setGrading(initialGradingState);
+      setActionPlan([]);
+      setActiveTab('builder');
+      setToast({ message: 'Profile data fetched successfully!', type: 'success' });
+    } catch (error) {
+      console.error(error);
+      setToast({ message: 'Error fetching profile. Using manual entry form.', type: 'error' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleGenerateAndGrade = async (dataOverride = null, options = {}) => {
+    if (isAdminViewer) {
+      setToast({ message: 'Preview mode: AI generation is disabled for admins.', type: 'info' });
+      return;
+    }
+
+    const { successMessage, manageProcessing = true, actionPlanOverride } = options;
+    const dataToUse = dataOverride || resumeData;
+
+    if (!dataToUse || typeof dataToUse !== 'object') {
+      setToast({ message: 'Resume data is missing. Please complete the builder first.', type: 'error' });
+      return;
+    }
+
+    if (manageProcessing) {
+      setIsProcessing(true);
+    }
+
+    setActiveTab('preview');
+    setGrading(initialGradingState);
+
+    try {
+      const generateResponse = await fetch(`${BASE_API_URL}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: safeSerialize(dataToUse)
+      });
+      if (!generateResponse.ok) throw new Error('AI Generation failed.');
+      const { enhancedContent } = await generateResponse.json();
+      if (!enhancedContent) throw new Error('AI did not return enhanced content.');
+
+      const gradeResponse = await fetch(`${BASE_API_URL}/grade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: safeSerialize({ rawData: dataToUse, enhancedContent })
+      });
+      if (!gradeResponse.ok) throw new Error('AI Grading failed.');
+      const gradingResult = await gradeResponse.json();
+      setGrading({ ...gradingResult, generatedContent: enhancedContent });
+      setActionPlan(actionPlanOverride || buildActionPlanFromSuggestions(gradingResult.suggestions));
+      setToast({ message: successMessage || 'Resume generated and graded by AI successfully!', type: 'success' });
+      setActiveTab('grade');
+    } catch (error) {
+      console.error(error);
+      setToast({ message: `Error: ${error.message}. Check backend console.`, type: 'error' });
+    } finally {
+      if (manageProcessing) {
+        setIsProcessing(false);
+      }
+    }
+  };
+
+  const handleApplySuggestions = async () => {
+    if (isAdminViewer) {
+      setToast({ message: 'Preview mode: applying suggestions is disabled for admins.', type: 'info' });
+      return;
+    }
+
+    if (!grading.suggestions || !grading.suggestions.length) {
+      setToast({ message: 'Run AI grading before applying suggestions.', type: 'info' });
+      return;
+    }
+
+    setToast({ message: 'Applying AI suggestions...', type: 'info' });
+    setIsProcessing(true);
+    try {
+      const serialisedSuggestions = Array.isArray(grading.suggestions)
+        ? grading.suggestions
+            .map((suggestion) => {
+              if (!suggestion || typeof suggestion !== 'object') {
+                return null;
+              }
+
+              const detail = typeof suggestion.detail === 'string'
+                ? suggestion.detail.trim()
+                : typeof suggestion.text === 'string'
+                ? suggestion.text.trim()
+                : '';
+
+              if (!detail) {
+                return null;
+              }
+
+              return {
+                priority: typeof suggestion.priority === 'string' ? suggestion.priority.trim() : 'Medium',
+                type: typeof suggestion.type === 'string'
+                  ? suggestion.type.trim() || 'General'
+                  : typeof suggestion.area === 'string'
+                  ? suggestion.area.trim() || 'General'
+                  : 'General',
+                detail,
+                example: typeof suggestion.example === 'string'
+                  ? suggestion.example.trim() || null
+                  : null
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      const response = await fetch(`${BASE_API_URL}/apply-suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: safeSerialize({ rawData: resumeData, suggestions: serialisedSuggestions })
+      });
+      if (!response.ok) throw new Error('Failed to apply suggestions.');
+      const { improvedData, actionPlan: revisedPlan } = await response.json();
+      const mergedDraft = mergeResumeData(improvedData);
+      const planOverride = Array.isArray(revisedPlan) && revisedPlan.length ? revisedPlan : null;
+      setResumeData(mergedDraft);
+      await handleGenerateAndGrade(mergedDraft, {
+        manageProcessing: false,
+        successMessage: 'AI suggestions applied. Updated resume is ready!',
+        actionPlanOverride: planOverride
+      });
+    } catch (error) {
+      console.error(error);
+      setToast({ message: `Failed to apply suggestions. ${error.message}`, type: 'error' });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadPDF = async (id) => {
+    setToast({ message: 'PDF download initiated (simulated)', type: 'info' });
+  };
+
+  return (
+    <div className="min-h-screen bg-bg-light">
+      {toast && <ToastNotification {...toast} onClose={() => setToast(null)} />}
+
+      <header className="bg-white shadow-md p-4 sticky top-0 z-10 border-t-4 border-deep-purple">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-black text-text-dark flex items-center">
+            <LucideIcon name="Feather" className="w-6 h-6 mr-2 text-deep-purple" />
+            AI Resume Studio
+          </h1>
+          <div className="flex items-center space-x-4">
+            {!isAdminViewer && (
+              <>
+                <button
+                  onClick={handleFetchProfile}
+                  disabled={isProcessing}
+                  className="px-4 py-2 bg-blue-accent text-white text-sm font-medium rounded-full shadow-md hover:bg-blue-accent/90 transition duration-150 disabled:opacity-50 flex items-center"
+                >
+                  <LucideIcon name="User" className="w-4 h-4 mr-2" />
+                  Fetch from Profile
+                </button>
+                <button
+                  onClick={handleGenerateAndGrade}
+                  disabled={isProcessing || filledFields < 5}
+                  className="relative px-6 py-2 bg-deep-purple text-white text-sm font-medium rounded-full shadow-xl hover:bg-deep-purple/90 transition duration-150 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-deep-purple/50 flex items-center"
+                >
+                  {isProcessing ? (
+                    <LucideIcon name="Loader" className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <LucideIcon name="Zap" className="w-4 h-4 mr-2" />
+                  )}
+                  Generate &amp; Grade with AI
+                </button>
+              </>
+            )}
+            {isAdminViewer && (
+              <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-full bg-warning-amber/20 text-warning-amber">
+                Preview Mode
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-4 md:p-8">
+        <div className="flex mb-6 border-b border-gray-200 sticky top-16 bg-bg-light/95 backdrop-blur-sm z-5">
+          {!isAdminViewer && <TabButton tabName="builder" label="1. Resume Builder" active={activeTab} setActive={setActiveTab} icon="PencilLine" />}
+          <TabButton tabName="preview" label={isAdminViewer ? 'Resume Preview' : '2. Live Preview'} active={activeTab} setActive={setActiveTab} icon="Monitor" />
+          {!isAdminViewer && <TabButton tabName="grade" label="3. AI Grade & Suggestions" active={activeTab} setActive={setActiveTab} icon="Award" />}
+
+          <div className="ml-auto flex items-center p-3 text-sm font-medium text-gray-700 bg-white rounded-t-lg shadow-inner">
+            <span className="mr-2">Completion:</span>
+            <span className="font-bold text-deep-purple">{progressPercentage}%</span>
+            <div className="w-20 h-2 bg-gray-200 rounded-full ml-2 overflow-hidden">
+              <div className="h-full bg-teal-accent transition-all duration-500" style={{ width: `${progressPercentage}%` }}></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {activeTab === 'builder' && !isAdminViewer && (
+            <ResumeBuilderTab
+              resumeData={resumeData}
+              setResumeData={setResumeData}
+              updateResumeData={updateResumeData}
+              addSectionItem={addSectionItem}
+              removeSectionItem={removeSectionItem}
+              disabled={isAdminViewer}
+            />
+          )}
+          {activeTab === 'preview' && <ResumePreviewTab isProcessing={isProcessing} grading={grading} />}
+          {activeTab === 'grade' && !isAdminViewer && (
+            <ResumeGradeTab
+              grading={grading}
+              isProcessing={isProcessing}
+              handleApplySuggestions={handleApplySuggestions}
+              handleDownloadPDF={handleDownloadPDF}
+              actionPlan={actionPlan}
+            />
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('ErrorBoundary caught:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-center text-red-600">
+          <h2 className="text-2xl font-bold">Something went wrong</h2>
+          <pre className="mt-4 text-left max-w-3xl mx-auto text-sm bg-white p-4 rounded border overflow-auto">{String(this.state.error)}</pre>
+          <p className="mt-4 text-sm text-gray-600">Open the browser console for details.</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const container = document.getElementById('resume-builder-root');
+const root = ReactDOM.createRoot(container);
+root.render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
+
+setTimeout(() => {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+}, 100);

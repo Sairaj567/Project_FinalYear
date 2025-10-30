@@ -1,120 +1,57 @@
 <%- include('../partials/header') %>
 
-<div class="dashboard-container">
-  
-  <% if (currentUser.role === 'student') { %>
+<div class="dashboard-container resume-builder-screen">
+  <% if (currentUser && currentUser.role === 'student') { %>
     <%- include('../partials/student-nav') %>
+  <% } else if (currentUser && currentUser.role === 'admin') { %>
+    <%- include('../partials/admin-nav') %>
   <% } %>
-  
-  <div class="main-content">
-    <div class="content-header">
-      <h1>Resume Builder</h1>
-    </div>
 
-    <% if (currentUser.role === 'student') { %>
-      <div class="card resume-controls">
-        <div class="form-group">
-          <label for="template-selector">Select Template</label>
-          <select id="template-selector">
-            <option value="">Default (Classic)</option>
-            <option value="template-modern">Modern</option>
-            <option value="template-minimal">Minimal</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" onclick="window.print()">Download as PDF</button>
-      </div>
-
-      <div class="card">
-        <h4>AI Resume Review 🤖</h4>
-        <p>Click the button to get AI-powered tips to improve your resume based on your profile data.</p>
-        <button class="btn btn-secondary" id="get-ai-review">Get AI Review</button>
-        <div id="ai-review-box" style="display: none; margin-top: 15px;">Click the button to generate your review.</div>
-        <script>
-          document.getElementById('get-ai-review').addEventListener('click', () => {
-            document.getElementById('ai-review-box').style.display = 'block';
-          }, { once: true });
-        </script>
-      </div>
-
-      <div class="card" style="border-color: var(--primary-color);">
-        <h4><span style="color: var(--primary-color);">NEW:</span> You can now edit this resume!</h4>
-        <p>Click anywhere on the white resume preview below to make changes. These edits are temporary and **will not** be saved to your profile. This is only for making final adjustments before printing to PDF.</p>
-      </div>
-    <% } else { %>
-      <div class="card" style="border-color: var(--primary-color);">
+  <div class="main-content" style="padding: 0;">
+    <% if (currentUser && currentUser.role === 'admin') { %>
+      <div class="card" style="margin: 20px;">
         <h4>Admin Preview Mode</h4>
-        <p>This is a read-only preview of the student's builder-generated resume. Printing is enabled.</p>
-        <button class="btn btn-primary" onclick="window.print()">Print Preview</button>
+        <p>AI interactions are disabled. Use the preview tab to review the student's resume output.</p>
       </div>
     <% } %>
-    <div class="resume-preview-wrapper">
-      <div class="resume-template" id="resume-to-print" contenteditable="<%= currentUser.role === 'student' ? 'true' : 'false' %>">
-        
-        <header class="resume-header">
-          <h1><%= profile.personal.firstName %> <%= profile.personal.lastName %></h1>
-          <div class="resume-contact">
-            <span><%= profile.user.email %></span>
-            <span><%= profile.personal.contactNumber %></span>
-            <span><a href="<%= profile.personal.linkedIn %>" target="_blank">LinkedIn</a></span>
-            <span><a href="<%= profile.personal.github %>" target="_blank">GitHub</a></span>
-          </div>
-        </header>
 
-        <section class="resume-section">
-          <h3>Education</h3>
-          <div class="resume-work-item">
-            <h4><%= profile.currentCourse.degree %> in <%= profile.currentCourse.branch %></h4>
-            <span class="company">Your University Name Here</span>
-            <span class="duration" style="float: right;">Graduating: <%= profile.currentCourse.graduationYear %></span>
-            <p style="margin-top: 5px;">Aggregate %: <%= profile.currentCourse.aggregatePercentage %>% | 12th: <%= profile.education.twelfthPercentage %>% | 10th: <%= profile.education.tenthPercentage %>%</p>
-          </div>
-        </section>
-
-        <section class="resume-section">
-          <h3>Technical Skills</h3>
-          <ul class="resume-list">
-            <% profile.skills.technical.forEach(skill => { %>
-              <li><%= skill %></li>
-            <% }) %>
-          </ul>
-        </section>
-
-        <section class="resume-section">
-          <h3>Projects</h3>
-          <% profile.projects.forEach(project => { %>
-            <div class="resume-work-item">
-              <h4><%= project.title %> <% if (project.url) { %> - <a href="<%= project.url %>" target="_blank">Project Link</a><% } %></h4>
-              <p style="clear: both; padding-top: 5px;"><%= project.description %></p>
-            </div>
-          <% }) %>
-        </section>
-
-        <section class="resume-section">
-          <h3>Work Experience</h3>
-          <% profile.workExperience.forEach(exp => { %>
-            <div class="resume-work-item">
-              <h4><%= exp.role %></h4>
-              <span class="company"><%= exp.company %></span>
-              <span class="duration" style="float: right;"><%= exp.duration %></span>
-              <p style="clear: both; padding-top: 5px;"><strong>Technologies:</strong> <%= exp.technologiesUsed.join(', ') %></p>
-              <p><%= exp.description %></p>
-            </div>
-          <% }) %>
-        </section>
-
-        <section class="resume-section">
-          <h3>Soft Skills</h3>
-          <ul class="resume-list">
-            <% profile.skills.soft.forEach(skill => { %>
-              <li><%= skill %></li>
-            <% }) %>
-          </ul>
-        </section>
-        
-      </div>
-    </div>
-
+    <div id="resume-builder-root"></div>
   </div>
 </div>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          'deep-purple': '#6366f1',
+          'blue-accent': '#3b82f6',
+          'teal-accent': '#14b8a6',
+          'success-green': '#10b981',
+          'warning-amber': '#f59e0b',
+          'error-rose': '#f43f5e',
+          'bg-light': '#f9fafb',
+          'text-dark': '#1e293b'
+        }
+      }
+    }
+  };
+</script>
+<script id="initial-resume-json" type="application/json"><%- JSON.stringify(resumeDraft || null) %></script>
+<script id="initial-resume-html" type="application/json"><%- JSON.stringify(resumeHtml || '') %></script>
+<script>
+  window.__API_BASE__ = window.location.origin;
+  window.__CURRENT_USER_ROLE__ = "<%= currentUser ? currentUser.role : '' %>";
+  const resumePayloadNode = document.getElementById('initial-resume-json');
+  const resumeHtmlNode = document.getElementById('initial-resume-html');
+  window.__INITIAL_RESUME__ = resumePayloadNode ? JSON.parse(resumePayloadNode.textContent || 'null') : null;
+  window.__INITIAL_RESUME_HTML__ = resumeHtmlNode ? JSON.parse(resumeHtmlNode.textContent || '""') : '';
+</script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script type="text/babel" src="/js/resume-builder.jsx"></script>
 
 <%- include('../partials/footer') %>

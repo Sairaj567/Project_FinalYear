@@ -36,7 +36,16 @@ if (Number.isNaN(port)) {
   throw new Error('Invalid PORT value.');
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+let genAI = null;
+if (process.env.GEMINI_API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  } catch (error) {
+    console.error('Failed to initialise Google Generative AI client:', error.message);
+  }
+} else {
+  console.warn('GEMINI_API_KEY is missing. AI-powered features will use fallback implementations.');
+}
 
 let server;
 
@@ -54,6 +63,63 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+const resumeModelName = process.env.RESUME_MODEL || 'gemini-2.5-pro';
+let resumeModel = null;
+
+if (genAI) {
+  try {
+    resumeModel = genAI.getGenerativeModel({ model: resumeModelName });
+    console.log(`Gemini resume model initialised: ${resumeModelName}`);
+  } catch (error) {
+    console.error('Failed to initialise resume builder Gemini model:', error.message);
+  }
+} else {
+  console.warn('Resume builder will operate using heuristic fallbacks (Gemini client unavailable).');
+}
+
+const mockResume = {
+  personalInfo: {
+    name: 'Alex Johnson',
+    email: 'alex.j@example.com',
+    phone: '555-500-1234',
+    linkedin: 'https://linkedin.com/in/alexj',
+    github: 'https://github.com/alexj-dev',
+    portfolio: 'https://alexj.dev'
+  },
+  education: [
+    {
+      college: 'State University',
+      degree: 'M.S. Data Science',
+      cgpa: '3.9',
+      year: '2025',
+      coursework: 'Machine Learning, Cloud Computing, Distributed Systems'
+    }
+  ],
+  skills: ['Python', 'TensorFlow', 'React', 'AWS', 'Data Pipelines'],
+  experience: [
+    {
+      company: 'Tech Innovators',
+      role: 'Data Science Intern',
+      duration: 'May 2024 - Aug 2024',
+      description: [
+        'Developed automated ETL jobs that reduced data preparation time by 30%.',
+        'Experimented with transformer models to uplift recommendation CTR by 12%.'
+      ]
+    }
+  ],
+  projects: [
+    {
+      title: 'AI Resume Grader',
+      technologies: 'React, Node, Gemini API',
+      description: 'Built a full-stack tool that analyses resumes and suggests targeted improvements using Gemini.',
+      githubLink: 'https://github.com/alexj-dev/ai-resume-grader'
+    }
+  ],
+  achievements: "Dean's List (2023, 2024)",
+  extracurriculars: 'Volunteer mentor at local coding bootcamp; organiser of Data Science Club hackathons.',
+  targetRole: 'Machine Learning Engineer'
+};
 
 const sanitizeRequest = (req, _res, next) => {
   ['body', 'params', 'headers', 'query'].forEach((key) => {
@@ -692,78 +758,191 @@ app.get('/student/jobs/:id', isLoggedIn, isStudent, async (req, res) => {
 // });
 app.get('/student/resume-builder', isLoggedIn, isStudent, async (req, res) => {
   try {
-    const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email');
-    res.render('student/resume-builder', { profile });
+    const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email username');
+    const resumeDraft = profile ? mapStudentProfileToResumeDraft(profile, profile.user || req.user) : null;
+    const resumeHtml = resumeDraft ? buildResumeHtml(resumeDraft) : '';
+
+    res.render('student/resume-builder', { profile, resumeDraft, resumeHtml });
   } catch (e) {
     console.error(e);
     res.redirect('/student/profile');
   }
 });
 
-app.post('/student/resume-builder/ai-review', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
+// --- Resume Builder API Endpoints ---
+app.post('/api/resume/fetch-profile', isLoggedIn, isStudent, async (req, res) => {
   try {
-    const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email');
-    
-    let resumeText = `
-      Full Name: ${profile.personal.firstName} ${profile.personal.middleName} ${profile.personal.lastName}
-      Contact: ${profile.user.email}, ${profile.personal.contactNumber}
-      LinkedIn: ${profile.personal.linkedIn}
-      GitHub: ${profile.personal.github}
+    const profile = await StudentProfile.findOne({ user: req.user._id }).populate('user', 'email username');
+    if (!profile) {
+      return res.json(mockResume);
+    }
 
-      --- EDUCATION ---
-      Degree: ${profile.currentCourse.degree} in ${profile.currentCourse.department} (${profile.currentCourse.branch})
-      Graduation Year: ${profile.currentCourse.graduationYear} (${profile.currentCourse.isPursuing ? 'Pursuing' : 'Completed'})
-      Aggregate Percentage: ${profile.currentCourse.aggregatePercentage}%
-      12th Percentage: ${profile.education.twelfthPercentage}%
-      10th Percentage: ${profile.education.tenthPercentage}%
-
-      --- SKILLS ---
-      Technical Skills: ${profile.skills.technical.join(', ')}
-      Soft Skills: ${profile.skills.soft.join(', ')}
-
-      --- PROJECTS ---
-      ${profile.projects.map(p => `
-        Project: ${p.title}
-        Description: ${p.description}
-        URL: ${p.url}
-      `).join('\n')}
-
-      --- WORK EXPERIENCE ---
-      ${profile.workExperience.map(exp => `
-        Company: ${exp.company}
-        Role: ${exp.role}
-        Duration: ${exp.duration}
-        Technologies: ${exp.technologiesUsed.join(', ')}
-        Description: ${exp.description}
-      `).join('\n')}
-
-      --- EXTRACURRICULAR ---
-      ${profile.extracurricular.join(', ')}
-
-      --- HOBBIES ---
-      ${profile.personal.hobbies.join(', ')}
-    `;
-
-    const prompt = `Please act as a professional career coach. Review the following resume for a student applying for a tech job. Provide 3-5 concise, actionable bullet points for improvement. Focus on clarity, impact, and how to better present their projects and experience. Format the response as a simple bulleted list (e.g., using * or -).
-    
-    --- RESUME ---
-    ${resumeText}
-    --- END RESUME ---
-    `;
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const aiText = response.text();
-
-    res.json({ success: true, review: aiText });
-
-  } catch (e) {
-    console.error("AI Review Error:", e);
-    res.json({ success: false, review: "An error occurred while generating the AI review. Please check the server console." });
+    const mappedProfile = mapStudentProfileToResumeDraft(profile, profile.user || req.user);
+    res.json(mappedProfile || mockResume);
+  } catch (error) {
+    console.error('Resume fetch-profile error:', error);
+    res.json(mockResume);
   }
 });
 
+app.post('/api/resume/save-draft', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
+  try {
+    const resumeData = req.body || {};
+    const draftId = Date.now().toString(36);
+    console.log(`[ResumeDraft] user=${req.user.username} draftId=${draftId}`, {
+      fields: Object.keys(resumeData)
+    });
+    res.json({ success: true, draftId });
+  } catch (error) {
+    console.error('Resume save-draft error:', error);
+    res.status(500).json({ success: false, message: 'Unable to save draft right now.' });
+  }
+});
+
+app.post('/api/resume/generate', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
+  const resumeData = req.body || {};
+
+  if (!resumeData || typeof resumeData !== 'object') {
+    return res.status(400).json({ message: 'Resume data must be provided.' });
+  }
+
+  let enhancedContent = '';
+
+  if (resumeModel) {
+    try {
+      const prompt = buildGenerationPrompt(resumeData);
+      const result = await resumeModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'text/plain',
+          temperature: 0.4
+        }
+      });
+      enhancedContent = result.response.text();
+    } catch (error) {
+      console.error('Gemini generate error, falling back to template:', error.message);
+    }
+  }
+
+  if (!enhancedContent || !enhancedContent.trim()) {
+    enhancedContent = buildResumeHtml(resumeData);
+  }
+
+  res.json({ enhancedContent });
+});
+
+app.post('/api/resume/grade', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
+  const resumeData = req.body?.rawData || req.body?.resumeData;
+  const enhancedContent = req.body?.enhancedContent;
+
+  if (!resumeData || typeof resumeData !== 'object') {
+    return res.status(400).json({ message: 'resumeData is required for grading.' });
+  }
+
+  let gradingPayload = null;
+
+  if (resumeModel) {
+    try {
+      const prompt = buildGradingPrompt(resumeData, enhancedContent);
+      const result = await resumeModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2
+        }
+      });
+
+      const text = result.response.text();
+      gradingPayload = transformGeminiGrade(JSON.parse(text));
+    } catch (error) {
+      console.error('Gemini grading error, falling back to heuristic scoring:', error.message);
+    }
+  }
+
+  if (!gradingPayload) {
+    gradingPayload = heuristicGrade(resumeData);
+  }
+
+  res.json(gradingPayload);
+});
+
+app.post('/api/resume/apply-suggestions', isLoggedIn, isStudent, apiLimiter, async (req, res) => {
+  const rawData = req.body?.rawData || req.body?.resumeData || {};
+  const suggestions = Array.isArray(req.body?.suggestions) ? req.body.suggestions : [];
+
+  console.log('[Resume][ApplySuggestions] request received', {
+    user: req.user?.username,
+    suggestionCount: suggestions.length,
+    hasTargetRole: !!rawData?.targetRole,
+    skillCount: Array.isArray(rawData?.skills) ? rawData.skills.length : 0,
+    experienceCount: Array.isArray(rawData?.experience) ? rawData.experience.length : 0
+  });
+
+  let improvedDraft = null;
+  let actionPlan = [];
+
+  if (resumeModel) {
+    try {
+      const prompt = buildApplySuggestionsPrompt(rawData, suggestions);
+      const result = await resumeModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.3
+        }
+      });
+
+      const rawText = result.response.text();
+      const parsed = safeJsonParse(rawText);
+
+      if (parsed && typeof parsed === 'object') {
+        const candidateResume = parsed.updatedResume || parsed.resume || parsed.data || null;
+        if (candidateResume && typeof candidateResume === 'object') {
+          improvedDraft = candidateResume;
+        }
+
+        const candidatePlan = parsed.actionPlan || parsed.aiChecklist || parsed.revisionSteps || [];
+        actionPlan = normaliseActionPlan(candidatePlan, suggestions);
+        console.log('[Resume][ApplySuggestions] Gemini response parsed', {
+          resumeKeys: candidateResume ? Object.keys(candidateResume) : [],
+          actionPlanCount: actionPlan.length
+        });
+      }
+    } catch (error) {
+      console.error('Gemini apply-suggestions error, falling back to heuristic improvements:', error.message);
+    }
+  }
+
+  if (!improvedDraft) {
+    const heuristicResult = applySuggestionsHeuristically(rawData, suggestions);
+    improvedDraft = heuristicResult.draft;
+    actionPlan = normaliseActionPlan(heuristicResult.actionPlan, suggestions);
+    console.log('[Resume][ApplySuggestions] Using heuristic improvements', {
+      actionPlanCount: actionPlan.length
+    });
+  } else if (!actionPlan.length) {
+    actionPlan = normaliseActionPlan([], suggestions);
+  }
+
+  console.log('[Resume][ApplySuggestions] response ready', {
+    updatedSkills: Array.isArray(improvedDraft?.skills) ? improvedDraft.skills.length : 0,
+    actionPlanCount: actionPlan.length
+  });
+
+  res.json({ improvedData: improvedDraft, actionPlan });
+});
+
+app.get('/api/resume/download/:id', isLoggedIn, isStudent, apiLimiter, (_req, res) => {
+  res.status(501).json({ message: 'PDF generation not implemented. Integrate Puppeteer or PDFKit.' });
+});
+
+app.get('/api/resume/history/:studentId', isLoggedIn, isStudent, apiLimiter, (req, res) => {
+  if (req.params.studentId !== String(req.user._id)) {
+    return res.json({ items: [] });
+  }
+
+  res.json({ items: [] });
+});
 
 // --- Admin Routes ---
 
@@ -929,10 +1108,12 @@ app.get('/admin/students/:id/resume-builder-preview', isLoggedIn, isAdmin, async
       req.flash('error', 'Student not found.');
       return res.redirect('/admin/students');
     }
-    const profile = await StudentProfile.findOne({ user: studentUser._id }).populate('user', 'email');
+    const profile = await StudentProfile.findOne({ user: studentUser._id }).populate('user', 'email username');
+    const resumeDraft = profile ? mapStudentProfileToResumeDraft(profile, profile.user || studentUser) : null;
+    const resumeHtml = resumeDraft ? buildResumeHtml(resumeDraft) : '';
     
     // We re-use the same EJS file, the EJS will hide the controls
-    res.render('student/resume-builder', { profile });
+    res.render('student/resume-builder', { profile, resumeDraft, resumeHtml });
 
   } catch (e) {
     console.error(e);
@@ -972,6 +1153,570 @@ app.post('/api/apply-for-job', isLoggedIn, isStudent, apiLimiter, async (req, re
     res.status(502).json({ success: false, message: 'Failed to submit application to the external service.' });
   }
 });
+
+function mapStudentProfileToResumeDraft(profileDoc, userDoc = {}) {
+  if (!profileDoc) {
+    return null;
+  }
+
+  const profile = typeof profileDoc.toObject === 'function' ? profileDoc.toObject() : profileDoc;
+  const user = userDoc && typeof userDoc.toObject === 'function' ? userDoc.toObject() : userDoc;
+
+  const fullName = [profile.personal?.firstName, profile.personal?.middleName, profile.personal?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const personalInfo = {
+    name: fullName || (user.username || '').trim(),
+    email: user.email || '',
+    phone: profile.personal?.contactNumber || '',
+    linkedin: profile.personal?.linkedIn || '',
+    github: profile.personal?.github || '',
+    portfolio: profile.personal?.otherSocialMedia || ''
+  };
+
+  const educationEntries = [];
+  if (profile.currentCourse && (profile.currentCourse.degree || profile.currentCourse.branch || profile.currentCourse.department)) {
+    const degreeParts = [profile.currentCourse.degree, profile.currentCourse.branch].filter(Boolean);
+    educationEntries.push({
+      college: profile.currentCourse.department || profile.currentCourse.degree || '',
+      degree: degreeParts.join(' - '),
+      cgpa: profile.currentCourse.aggregatePercentage != null && profile.currentCourse.aggregatePercentage !== ''
+        ? String(profile.currentCourse.aggregatePercentage)
+        : '',
+      year: profile.currentCourse.graduationYear ? String(profile.currentCourse.graduationYear) : '',
+      coursework: summariseAcademicHighlights(profile)
+    });
+  }
+  if (!educationEntries.length) {
+    educationEntries.push({ college: '', degree: '', cgpa: '', year: '', coursework: '' });
+  }
+
+  const experienceEntries = toArraySafe(profile.workExperience).map((exp) => ({
+    company: exp.company || '',
+    role: exp.role || '',
+    duration: exp.duration || '',
+    description: toDescriptionArray(exp.description, exp.technologiesUsed)
+  }));
+  if (!experienceEntries.length) {
+    experienceEntries.push({ company: '', role: '', duration: '', description: [''] });
+  }
+
+  const projectsEntries = toArraySafe(profile.projects).map((proj) => ({
+    title: proj.title || '',
+    technologies: proj.technologies || '',
+    description: proj.description || '',
+    githubLink: proj.url || ''
+  }));
+  if (!projectsEntries.length) {
+    projectsEntries.push({ title: '', technologies: '', description: '', githubLink: '' });
+  }
+
+  const combinedSkills = [...new Set([...toArraySafe(profile.skills?.technical), ...toArraySafe(profile.skills?.soft)])].filter(Boolean);
+  if (!combinedSkills.length) {
+    combinedSkills.push('Teamwork');
+  }
+
+  const achievementsText = toArraySafe(profile.certificates).map((cert) => cert.title).filter(Boolean).join('; ');
+  const extracurricularText = toArraySafe(profile.extracurricular).filter(Boolean).join('; ')
+    || toArraySafe(profile.personal?.hobbies).filter(Boolean).join('; ');
+
+  const defaultRole = profile.currentCourse?.branch
+    ? `${profile.currentCourse.branch} ${profile.currentCourse.degree || 'Professional'}`.trim()
+    : mockResume.targetRole;
+
+  return {
+    personalInfo,
+    education: educationEntries,
+    skills: combinedSkills,
+    experience: experienceEntries,
+    projects: projectsEntries,
+    achievements: achievementsText || '',
+    extracurriculars: extracurricularText || '',
+    targetRole: defaultRole || mockResume.targetRole
+  };
+}
+
+function toArraySafe(value) {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== null && item !== undefined);
+  }
+  return [value];
+}
+
+function toDescriptionArray(description, technologies) {
+  const bullets = [];
+
+  if (Array.isArray(technologies) && technologies.length) {
+    const techLine = technologies.filter(Boolean).join(', ');
+    if (techLine) {
+      bullets.push(`Tech stack: ${techLine}`);
+    }
+  }
+
+  if (Array.isArray(description)) {
+    description
+      .filter((item) => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => bullets.push(item));
+  } else if (typeof description === 'string') {
+    description
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[•\-\s]+/, '').trim())
+      .filter(Boolean)
+      .forEach((line) => bullets.push(line));
+  }
+
+  if (!bullets.length) {
+    bullets.push('');
+  }
+
+  return bullets;
+}
+
+function summariseAcademicHighlights(profile) {
+  const parts = [];
+
+  if (profile.education?.tenthPercentage) {
+    parts.push(`10th: ${profile.education.tenthPercentage}%`);
+  }
+  if (profile.education?.twelfthPercentage) {
+    parts.push(`12th: ${profile.education.twelfthPercentage}%`);
+  }
+  if (profile.education?.diplomaPercentage) {
+    parts.push(`Diploma: ${profile.education.diplomaPercentage}%`);
+  }
+
+  return parts.join(' | ');
+}
+
+function buildGenerationPrompt(resumeData) {
+  return `You are an expert technical resume writer. Using the following JSON resume data, craft a modern, ATS-friendly resume as clean HTML without <html> or <body> tags. Use a single-column layout with bold section headings and bullet lists. Focus on clarity, quantified achievements, and consistent tense.
+
+Resume JSON:\n${JSON.stringify(resumeData, null, 2)}\n`;
+}
+
+function buildGradingPrompt(resumeData, enhancedContent) {
+  return `You are acting as both an Applicant Tracking System (ATS) analyst and senior career coach. Given the raw resume JSON and the enhanced HTML version, return a JSON object with the following exact keys: overallScore (0-100), atsScore (0-100), contentScore (0-100), designScore (0-100), completenessScore (0-100), suggestions (array of { priority: High|Medium|Low, type: string, detail: string, example: string|null }). Provide actionable, concise suggestions.
+
+Raw JSON:\n${JSON.stringify(resumeData, null, 2)}\n
+Enhanced HTML:\n${enhancedContent || buildResumeHtml(resumeData)}\n`;
+}
+
+function transformGeminiGrade(result) {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+
+  const suggestions = Array.isArray(result.suggestions)
+    ? result.suggestions.map((item) => ({
+        priority: item.priority || 'Medium',
+        type: item.type || item.area || 'General',
+        detail: item.detail || item.text || 'No suggestion provided.',
+        example: item.example || null
+      }))
+    : [];
+
+  const atsScore = result.atsScore || result.categoryScores?.atsCompatibility || 0;
+  const contentScore = result.contentScore || result.categoryScores?.contentQuality || 0;
+  const designScore = result.designScore || result.categoryScores?.formattingDesign || 0;
+  const completenessScore = result.completenessScore || result.categoryScores?.completeness || 0;
+
+  const overall = result.overallScore || Math.round((atsScore + contentScore + designScore + completenessScore) / 4);
+
+  return {
+    overallScore: overall,
+    atsScore,
+    contentScore,
+    designScore,
+    completenessScore,
+    suggestions
+  };
+}
+
+function heuristicGrade(resumeData) {
+  const sectionsPresent = [
+    !!resumeData.personalInfo?.name,
+    Array.isArray(resumeData.education) && resumeData.education.length > 0,
+    Array.isArray(resumeData.experience) && resumeData.experience.length > 0,
+    Array.isArray(resumeData.skills) && resumeData.skills.length > 0
+  ].filter(Boolean).length;
+
+  const completenessScore = Math.min(100, sectionsPresent * 25);
+  const atsScore = Math.min(100, (resumeData.skills?.length || 0) * 15 + 25);
+  const contentScore = Math.min(100, (resumeData.experience?.[0]?.description?.length || 0) * 20 + 40);
+  const designScore = 70;
+  const overallScore = Math.round((completenessScore + atsScore + contentScore + designScore) / 4);
+
+  return {
+    overallScore,
+    atsScore,
+    contentScore,
+    designScore,
+    completenessScore,
+    suggestions: [
+      {
+        priority: 'High',
+        type: 'Content Quality',
+        detail: 'Add quantified achievements to the experience section to highlight impact.',
+        example: 'Increased API throughput by 35% by optimising caching layers.'
+      },
+      {
+        priority: 'Medium',
+        type: 'ATS Keywords',
+        detail: 'Include 4-5 keywords from the job description in your skills and experience bullets.',
+        example: null
+      }
+    ]
+  };
+}
+
+function buildResumeHtml(resumeData) {
+  const personal = resumeData.personalInfo || {};
+  const education = Array.isArray(resumeData.education) ? resumeData.education : [];
+  const experience = Array.isArray(resumeData.experience) ? resumeData.experience : [];
+  const projects = Array.isArray(resumeData.projects) ? resumeData.projects : [];
+  const skills = Array.isArray(resumeData.skills) ? resumeData.skills : [];
+
+  const section = (title, content) =>
+    content ? `<section style="margin-bottom: 20px;"><h2 style="font-size:18px;margin-bottom:8px;border-bottom:2px solid #e5e7eb;padding-bottom:4px;">${title}</h2>${content}</section>` : '';
+
+  const personalBlock = `
+    <header style="text-align:center;margin-bottom:24px;">
+      <h1 style="font-size:28px;margin-bottom:4px;">${personal.name || 'Full Name'}</h1>
+      <p style="color:#4b5563;">${[personal.email, personal.phone].filter(Boolean).join(' | ')}</p>
+      <p style="color:#4b5563;">${[personal.linkedin, personal.github, personal.portfolio].filter(Boolean).join(' | ')}</p>
+    </header>
+  `;
+
+  const educationBlock = education
+    .map((edu) => `
+      <div style="margin-bottom:12px;">
+        <h3 style="font-size:16px;font-weight:600;">${edu.college || ''}</h3>
+        <p style="margin:4px 0;color:#1f2937;">${edu.degree || ''} • ${edu.year || ''}</p>
+        <p style="margin:0;color:#4b5563;">CGPA: ${edu.cgpa || 'N/A'}</p>
+        ${edu.coursework ? `<p style="margin:4px 0;color:#4b5563;">Coursework: ${edu.coursework}</p>` : ''}
+      </div>
+    `)
+    .join('');
+
+  const experienceBlock = experience
+    .map((exp) => `
+      <div style="margin-bottom:16px;">
+        <h3 style="font-size:16px;font-weight:600;">${exp.role || ''} • ${exp.company || ''}</h3>
+        <p style="margin:4px 0;color:#1f2937;">${exp.duration || ''}</p>
+        <ul style="margin:8px 0 0 20px;color:#374151;">
+          ${(Array.isArray(exp.description) ? exp.description : []).map((bullet) => `<li>${bullet}</li>`).join('')}
+        </ul>
+      </div>
+    `)
+    .join('');
+
+  const projectsBlock = projects
+    .map((proj) => `
+      <div style="margin-bottom:12px;">
+        <h3 style="font-size:16px;font-weight:600;">${proj.title || ''}</h3>
+        <p style="margin:4px 0;color:#1f2937;">Tech: ${proj.technologies || ''}</p>
+        <p style="margin:0;color:#374151;">${proj.description || ''}</p>
+        ${proj.githubLink ? `<p style="margin-top:4px;"><a href="${proj.githubLink}" style="color:#2563eb;">GitHub</a></p>` : ''}
+      </div>
+    `)
+    .join('');
+
+  const achievementsBlock = resumeData.achievements
+    ? `<p style="color:#374151;">${resumeData.achievements}</p>`
+    : '';
+
+  const extracurricularBlock = resumeData.extracurriculars
+    ? `<p style="color:#374151;">${resumeData.extracurriculars}</p>`
+    : '';
+
+  const skillsBlock = skills.length
+    ? `<ul style="display:flex;flex-wrap:wrap;gap:8px;padding:0;list-style:none;">${skills
+        .map((skill) => `<li style="background:#e0e7ff;color:#312e81;padding:6px 12px;border-radius:9999px;font-size:14px;">${skill}</li>`)
+        .join('')}</ul>`
+    : '';
+
+  return `
+    <article style="font-family:'Inter',sans-serif;max-width:800px;margin:0 auto;padding:32px;background:#ffffff;color:#111827;line-height:1.5;">
+      ${personalBlock}
+      ${section('Professional Summary', resumeData.targetRole ? `<p style=\"color:#374151;\">Target Role: ${resumeData.targetRole}</p>` : '')}
+      ${section('Skills', skillsBlock)}
+      ${section('Experience', experienceBlock)}
+      ${section('Projects', projectsBlock)}
+      ${section('Education', educationBlock)}
+      ${section('Achievements & Certifications', achievementsBlock)}
+      ${section('Extracurricular Activities', extracurricularBlock)}
+    </article>
+  `;
+}
+
+function safeJsonParse(payload) {
+  if (!payload || typeof payload !== 'string') {
+    return null;
+  }
+
+  let text = payload.trim();
+  if (!text) {
+    return null;
+  }
+
+  if (text.startsWith('```')) {
+    text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/```$/g, '').trim();
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (primaryError) {
+    try {
+      const sanitised = text
+        .replace(/```[a-zA-Z]*\s*/g, '')
+        .replace(/```/g, '')
+        .replace(/\u0000/g, '')
+        .trim();
+      return JSON.parse(sanitised);
+    } catch (secondaryError) {
+      console.error('Failed to parse JSON payload from Gemini:', secondaryError.message);
+      return null;
+    }
+  }
+}
+
+function buildApplySuggestionsPrompt(resumeData, suggestions) {
+  return `You are an expert technical resume editor. You will be given the current resume JSON data and a list of improvement suggestions. Incorporate the suggestions directly into the resume content (rewrite bullets, add keywords, update targetRole, etc.) while keeping the original schema: personalInfo, education[], skills[], experience[], projects[], achievements, extracurriculars, targetRole. Respond with STRICT JSON using this shape:\n\n{\n  "updatedResume": { ... },\n  "actionPlan": [\n    {"priority": "High|Medium|Low", "task": "", "example": "optional"}\n  ]\n}\n\nOnly include fields that exist in the original resume structure. Preserve arrays and strings. Be concise but specific in your edits.\n\nResume JSON:\n${JSON.stringify(resumeData || {}, null, 2)}\n\nSuggestions:\n${JSON.stringify(suggestions || [], null, 2)}\n`;
+}
+
+function applySuggestionsHeuristically(resumeData, suggestions = []) {
+  const draft = normaliseResumeDraft(resumeData);
+  const actionPlan = [];
+
+  const registerAction = (priority, task, example) => {
+    if (!task) {
+      return;
+    }
+    actionPlan.push({
+      priority: priority || 'Medium',
+      task,
+      example: example || null
+    });
+  };
+
+  if (!Array.isArray(suggestions) || !suggestions.length) {
+    registerAction('Medium', 'Review AI feedback manually and adjust each section of your resume.', null);
+    return { draft, actionPlan };
+  }
+
+  suggestions.forEach((suggestion) => {
+    if (!suggestion || typeof suggestion !== 'object') {
+      return;
+    }
+
+    const detail = (suggestion.detail || suggestion.text || '').trim();
+    const example = suggestion.example || null;
+    const priority = suggestion.priority || 'Medium';
+    const lowerDetail = detail.toLowerCase();
+
+    if (lowerDetail.includes('keyword') || lowerDetail.includes('ats')) {
+      const keywords = extractKeywordsFromSuggestion(suggestion);
+      if (keywords.length) {
+        draft.skills = Array.isArray(draft.skills) ? draft.skills : [];
+        keywords.forEach((keyword) => uniquePush(draft.skills, keyword));
+        registerAction(priority, `Blend these ATS keywords into experience and skills: ${keywords.join(', ')}`, example);
+      } else if (detail) {
+        registerAction(priority, detail, example);
+      }
+      return;
+    }
+
+    if (lowerDetail.includes('quant')) {
+      const targetExperience = draft.experience[0];
+      if (targetExperience) {
+        targetExperience.description = Array.isArray(targetExperience.description) ? targetExperience.description : [];
+        const sampleBullet = example || 'Quantify the outcome of your work (e.g., "Increased API throughput by 35% by optimising caching layers").';
+        uniquePush(targetExperience.description, sampleBullet);
+      }
+      registerAction(priority, detail || 'Add quantified achievements to your experience section.', example);
+      return;
+    }
+
+    if (lowerDetail.includes('summary') || lowerDetail.includes('profile')) {
+      if (example) {
+        draft.targetRole = example;
+      } else if (detail && !draft.targetRole) {
+        draft.targetRole = detail;
+      }
+      registerAction(priority, detail || 'Refine your professional summary to highlight impact in a single sentence.', example);
+      return;
+    }
+
+    if (lowerDetail.includes('project') && example) {
+      const targetProject = draft.projects[0];
+      if (targetProject) {
+        targetProject.description = [targetProject.description, example].filter(Boolean).join('\n');
+      }
+      registerAction(priority, detail || 'Enhance project descriptions with clearer outcomes.', example);
+      return;
+    }
+
+    if (detail) {
+      const targetExperience = draft.experience[0];
+      if (targetExperience) {
+        targetExperience.description = Array.isArray(targetExperience.description) ? targetExperience.description : [];
+        uniquePush(targetExperience.description, example || `AI Suggestion: ${detail}`);
+      }
+      registerAction(priority, detail, example);
+    }
+  });
+
+  if (!actionPlan.length) {
+    registerAction('Medium', 'Review AI feedback and update the resume sections accordingly.', null);
+  }
+
+  return { draft, actionPlan };
+}
+
+function normaliseActionPlan(plan, fallbackSuggestions) {
+  const result = [];
+
+  if (Array.isArray(plan)) {
+    plan.forEach((item) => {
+      if (!item) {
+        return;
+      }
+      if (typeof item === 'string') {
+        const trimmed = item.trim();
+        if (trimmed) {
+          result.push({ priority: 'Medium', task: trimmed, example: null });
+        }
+        return;
+      }
+
+      if (typeof item === 'object') {
+        const task = (item.task || item.detail || '').trim();
+        if (task) {
+          result.push({
+            priority: item.priority || 'Medium',
+            task,
+            example: item.example || null
+          });
+        }
+      }
+    });
+  }
+
+  if (!result.length && Array.isArray(fallbackSuggestions)) {
+    fallbackSuggestions.forEach((suggestion) => {
+      if (!suggestion || typeof suggestion !== 'object') {
+        return;
+      }
+      const detail = (suggestion.detail || suggestion.text || '').trim();
+      if (!detail) {
+        return;
+      }
+      result.push({
+        priority: suggestion.priority || 'Medium',
+        task: detail,
+        example: suggestion.example || null
+      });
+    });
+  }
+
+  return result;
+}
+
+function normaliseResumeDraft(data) {
+  const clone = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : {};
+
+  clone.personalInfo = clone.personalInfo && typeof clone.personalInfo === 'object'
+    ? clone.personalInfo
+    : { name: '', email: '', phone: '', linkedin: '', github: '', portfolio: '' };
+
+  clone.education = Array.isArray(clone.education) && clone.education.length
+    ? clone.education.map((edu) => ({
+        college: edu?.college || '',
+        degree: edu?.degree || '',
+        cgpa: edu?.cgpa || '',
+        year: edu?.year || '',
+        coursework: edu?.coursework || ''
+      }))
+    : [{ college: '', degree: '', cgpa: '', year: '', coursework: '' }];
+
+  clone.skills = Array.isArray(clone.skills) ? clone.skills.filter(Boolean) : [];
+
+  clone.experience = Array.isArray(clone.experience) && clone.experience.length
+    ? clone.experience.map((exp) => ({
+        company: exp?.company || '',
+        role: exp?.role || '',
+        duration: exp?.duration || '',
+        description: Array.isArray(exp?.description) && exp.description.length ? exp.description.filter(Boolean) : ['']
+      }))
+    : [{ company: '', role: '', duration: '', description: [''] }];
+
+  clone.projects = Array.isArray(clone.projects) && clone.projects.length
+    ? clone.projects.map((proj) => ({
+        title: proj?.title || '',
+        technologies: proj?.technologies || '',
+        description: proj?.description || '',
+        githubLink: proj?.githubLink || proj?.github || ''
+      }))
+    : [{ title: '', technologies: '', description: '', githubLink: '' }];
+
+  clone.achievements = clone.achievements || '';
+  clone.extracurriculars = clone.extracurriculars || '';
+  clone.targetRole = clone.targetRole || '';
+
+  return clone;
+}
+
+function uniquePush(targetArray, value) {
+  if (!Array.isArray(targetArray)) {
+    return;
+  }
+  const trimmed = typeof value === 'string' ? value.trim() : value;
+  if (!trimmed) {
+    return;
+  }
+  if (!targetArray.some((item) => item === trimmed)) {
+    targetArray.push(trimmed);
+  }
+}
+
+function extractKeywordsFromSuggestion(suggestion) {
+  const payload = [suggestion?.detail, suggestion?.example]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/[\[\]]/g, ' ');
+
+  if (!payload) {
+    return [];
+  }
+
+  const segments = payload
+    .split(/[,;\n]| and /i)
+    .map((segment) => segment.replace(/"|'/g, '').trim())
+    .filter((segment) => segment && segment.length <= 40);
+
+  const keywords = [];
+  segments.forEach((segment) => {
+    if (!segment) {
+      return;
+    }
+    if (segment.match(/\d/)) {
+      keywords.push(segment);
+      return;
+    }
+    if (segment.split(' ').length <= 4) {
+      keywords.push(segment);
+    }
+  });
+
+  return [...new Set(keywords)].slice(0, 6);
+}
 
 // =================================================================
 //                        ERROR HANDLING
